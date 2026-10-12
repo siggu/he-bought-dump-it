@@ -58,7 +58,7 @@ export function StockDetail() {
           <section className="card">
             <h2>이 종목은 매매할 수 없어요</h2>
             <p className="muted">
-              계정당 한 종목만 사고팔 수 있습니다. 현재 메인 종목은 <strong>{me.user.mainName}</strong>입니다.
+              지금은 거래 종목으로 설정한 종목만 사고팔 수 있어요. 현재 거래 종목은 <strong>{me.user.mainName}</strong>입니다.
             </p>
             {canChange ? (
               <Link className="button" to="/settings/main">

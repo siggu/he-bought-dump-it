@@ -2,7 +2,7 @@ import { PRIVACY_KEYS, type Privacy, type PrivacyKey } from "../../../shared/pro
 
 const LABELS: Record<PrivacyKey, { title: string; desc: string }> = {
   badges: { title: "획득한 배지", desc: "모은 배지 목록 (획득 조건은 다른 사람에게 보이지 않아요)" },
-  mainSymbol: { title: "메인 종목", desc: "내가 올인한 종목" },
+  mainSymbol: { title: "메인 종목", desc: "내가 거래 중인 종목" },
   bankruptCount: { title: "파산 횟수", desc: "공개하면 '파산 명예의 전당'에 오를 수 있어요" },
   totalAssets: { title: "총자산", desc: "현금 + 보유 주식 평가액" },
   profitRate: { title: "보유 종목 수익률", desc: "평균 단가 대비 현재 수익률" },

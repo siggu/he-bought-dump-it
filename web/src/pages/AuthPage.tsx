@@ -33,7 +33,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
           <Logo size="lg" />
         </p>
         <p className="muted">
-          한 종목에 올인하는 실시간 모의 투자.
+          가상 자금 1,000만원으로 시작하는 실시간 주식 모의 투자.
           <br />
           파산하면 미니게임으로 재기하세요.
         </p>

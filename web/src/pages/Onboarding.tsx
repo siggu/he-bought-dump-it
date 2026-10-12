@@ -42,9 +42,9 @@ export function Onboarding() {
   return (
     <main className="narrow">
       <section className="card">
-        <h1>{changing ? "메인 종목 변경" : "올인할 종목을 고르세요"}</h1>
+        <h1>{changing ? "메인 종목 변경" : "거래할 종목을 고르세요"}</h1>
         <p className="muted">
-          계정당 <strong>한 종목만</strong> 사고팔 수 있습니다. 다른 종목은 검색해서 실시간 시세만 볼 수 있어요.
+          선택한 종목을 가상 자금으로 사고팔 수 있어요. 다른 종목은 검색해서 시세를 볼 수 있습니다.
           <br />
           메인 종목은 보유 주식이 없을 때만, 7일에 한 번 바꿀 수 있습니다.
         </p>
