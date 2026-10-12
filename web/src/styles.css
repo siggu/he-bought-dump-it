@@ -1508,3 +1508,18 @@ main > section.card + section.card {
 .chip.fav {
   border-color: color-mix(in srgb, #fcc419 45%, var(--border));
 }
+.chip.editable {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 12px 4px 6px;
+  border: 1px solid color-mix(in srgb, #fcc419 45%, var(--border));
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+.chip.editable a {
+  text-decoration: none;
+}
+.chip.editable .fav-button {
+  font-size: 16px;
+}

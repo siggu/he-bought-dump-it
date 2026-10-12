@@ -4,6 +4,7 @@ import type { MyProfile, Privacy, PublicProfile } from "../../../shared/protocol
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { BadgeChip, Nickname, TIER_LABEL } from "../components/Badge";
+import { FavoriteList } from "../components/FavoriteList";
 import { ALL_PRIVATE, InteractionForm, PrivacyForm } from "../components/PrivacyForm";
 import { dateTime, pct, won } from "../format";
 
@@ -46,7 +47,7 @@ export function ProfileSetup() {
 
 /** 내 프로필: 배지함, 대표 배지, 닉네임 변경, 공개 범위 */
 export function MyProfilePage() {
-  const { refresh } = useAuth();
+  const { me, refresh } = useAuth();
   const [profile, setProfile] = useState<MyProfile | null>(null);
   const [nickname, setNickname] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -139,6 +140,14 @@ export function MyProfilePage() {
       </section>
 
       <section className="card">
+        <h2>
+          ★ 관심 종목 <span className="muted small">{me?.favorites.length ?? 0}개</span>
+        </h2>
+        <p className="muted small">★를 누르면 관심 종목에서 빠지고, 종목 이름을 누르면 종목 화면으로 이동해요.</p>
+        <FavoriteList editable />
+      </section>
+
+      <section className="card">
         <h2>닉네임 변경</h2>
         <p className="notice">
           ⚠️ 닉네임은 <strong>3일(72시간)에 한 번만</strong> 바꿀 수 있습니다. 바꾼 뒤 72시간 동안은 다시 바꿀 수 없으니
@@ -146,6 +155,8 @@ export function MyProfilePage() {
         </p>
         <form className="inline-form" onSubmit={submitNickname}>
           <input
+            name="nickname"
+            autoComplete="off"
             value={nickname}
             maxLength={16}
             onChange={(e) => setNickname(e.target.value)}
