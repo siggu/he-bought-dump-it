@@ -5,6 +5,14 @@
   // 2024-09-02 이후 날짜여야 fetch()에서 KIS의 비표준 포트(:9443, :21000)를 쓸 수 있다(allow_custom_ports).
   "compatibility_date": "2025-09-01",
   "observability": { "enabled": true },
+  "workers_dev": true,
+
+  // wrangler deploy / versions upload / dev 전에 프론트엔드를 빌드한다.
+  // (GitHub Actions든 Cloudflare Workers Builds든 같은 결과가 나오도록)
+  "build": {
+    "command": "npm run build:web",
+    "watch_dir": "web/src"
+  },
 
   // 프론트엔드(Vite 빌드 결과). /api/* 는 Worker가 먼저 처리하고 나머지는 SPA로 응답한다.
   "assets": {
@@ -17,8 +25,8 @@
     {
       "binding": "DB",
       "database_name": "he-bought-dump-it",
-      // GitHub Actions 배포 시 자동으로 생성/채워진다. 직접 배포하려면 `npx wrangler d1 create he-bought-dump-it`의 ID로 바꿔 주세요.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // 운영 D1 데이터베이스 ID (비밀값 아님 — 계정 인증 없이는 접근할 수 없다)
+      "database_id": "91d4cac6-dc2c-4ae3-8fdd-33194b569895",
       "migrations_dir": "migrations"
     }
   ],

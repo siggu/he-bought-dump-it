@@ -92,6 +92,7 @@ export const api = {
   }) =>
     request<MyProfile>("POST", "/me/profile", input),
   changeNickname: (nickname: string) => request<MyProfile>("POST", "/me/nickname", { nickname }),
+  favorite: (symbol: string, on: boolean) => request<{ favorites: string[] }>("POST", "/me/favorites", { symbol, on }),
   badgesSeen: () => request<{ ok: true }>("POST", "/me/badges/seen"),
   user: (nickname: string) => request<PublicProfile>("GET", `/users/${encodeURIComponent(nickname)}`),
   arena: (target?: string | null) =>

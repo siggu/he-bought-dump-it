@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { GameDifficulty, OrderRow, StockInfo } from "../shared/protocol";
+import { searchStocks } from "../shared/search";
 import {
   buildMe,
   claimSalary,
@@ -167,6 +168,29 @@ app.post("/me/nickname", async (c) => {
   return c.json(await myProfile(c.env, c.get("user").id));
 });
 
+/** 관심 종목(별표) 켜기/끄기 */
+app.post("/me/favorites", async (c) => {
+  const { symbol, on } = await body<{ symbol: string; on: boolean }>(c.req.raw);
+  const s = String(symbol ?? "").toUpperCase();
+  const userId = c.get("user").id;
+  if (!(await c.env.DB.prepare("SELECT 1 FROM stocks WHERE symbol = ?").bind(s).first())) {
+    return c.json({ error: "존재하지 않는 종목입니다." }, 404);
+  }
+  if (on) {
+    const count = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM favorites WHERE user_id = ?").bind(userId).first<{ n: number }>();
+    if ((count?.n ?? 0) >= 50) return c.json({ error: "관심 종목은 50개까지 등록할 수 있습니다." }, 409);
+    await c.env.DB.prepare("INSERT OR IGNORE INTO favorites (user_id, symbol, created_at) VALUES (?, ?, ?)")
+      .bind(userId, s, Date.now())
+      .run();
+  } else {
+    await c.env.DB.prepare("DELETE FROM favorites WHERE user_id = ? AND symbol = ?").bind(userId, s).run();
+  }
+  const { results } = await c.env.DB.prepare("SELECT symbol FROM favorites WHERE user_id = ? ORDER BY created_at")
+    .bind(userId)
+    .all<{ symbol: string }>();
+  return c.json({ favorites: results.map((r) => r.symbol) });
+});
+
 app.post("/me/badges/seen", async (c) => {
   await markBadgesSeen(c.env, c.get("user").id);
   return c.json({ ok: true });
@@ -174,19 +198,21 @@ app.post("/me/badges/seen", async (c) => {
 
 app.get("/users/:nickname", async (c) => c.json(await publicProfile(c.env, c.req.param("nickname"))));
 
+async function allStocks(env: AppEnv["Bindings"]): Promise<StockInfo[]> {
+  const { results } = await env.DB.prepare("SELECT symbol, name, market, aliases FROM stocks ORDER BY symbol").all<StockInfo>();
+  return results;
+}
+
+/** 전체 종목 목록. 브라우저가 한 번 받아 두고 검색을 즉시 처리한다. */
+app.get("/stocks", async (c) => {
+  c.header("Cache-Control", "public, max-age=3600");
+  return c.json({ stocks: await allStocks(c.env) });
+});
+
 app.get("/stocks/search", async (c) => {
   const q = (c.req.query("q") ?? "").trim();
   if (q.length === 0) return c.json({ results: [] });
-  const like = `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
-  const { results } = await c.env.DB.prepare(
-    `SELECT symbol, name, market FROM stocks
-      WHERE name LIKE ?1 ESCAPE '\\' OR symbol LIKE ?1 ESCAPE '\\'
-      ORDER BY (name = ?2 OR symbol = ?2) DESC, length(name), name
-      LIMIT 20`,
-  )
-    .bind(like, q)
-    .all<StockInfo>();
-  return c.json({ results });
+  return c.json({ results: searchStocks(await allStocks(c.env), q) });
 });
 
 app.get("/stocks/:symbol", async (c) => {

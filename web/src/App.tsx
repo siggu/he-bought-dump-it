@@ -117,7 +117,7 @@ function Header() {
         <Logo />
       </Link>
       {me?.user.profileSetupDone && (
-        <StockSearch placeholder="종목 검색" onSelect={(s) => navigate(`/stocks/${s.symbol}`)} />
+        <StockSearch placeholder="종목 검색 (예: 네이버, 삼전, ㅅㅅㅈㅈ)" onSelect={(s) => navigate(`/stocks/${s.symbol}`)} />
       )}
       <nav>
         {me?.user.profileSetupDone && (

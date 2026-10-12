@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Candle } from "../shared/protocol";
+import { normalize as normalizeQuery, searchStocks, toChoseong } from "../shared/search";
 import { closeOnOrBefore, duelEndAt, priceBand } from "../worker/arena";
 import { BADGES, monthStreak, tradingStreak } from "../worker/badges";
 import { parseKisMessage, subscriptionMessage } from "../worker/hub/kis";
@@ -260,5 +261,43 @@ describe("유저 간 상호작용", () => {
     expect(closeOnOrBefore(candles, "2026-10-18")).toBe(110);
     expect(closeOnOrBefore(candles, "2026-10-19")).toBe(120);
     expect(closeOnOrBefore(candles, "2026-10-01")).toBeNull();
+  });
+});
+
+describe("종목 검색", () => {
+  const stocks = [
+    { symbol: "005930", name: "삼성전자", market: "KOSPI", aliases: "삼전,삼성" },
+    { symbol: "005935", name: "삼성전자우", market: "KOSPI", aliases: "삼전우,삼성우" },
+    { symbol: "035420", name: "NAVER", market: "KOSPI", aliases: "네이버,naver" },
+    { symbol: "000660", name: "SK하이닉스", market: "KOSPI", aliases: "하이닉스,에스케이하이닉스" },
+    { symbol: "010950", name: "S-Oil", market: "KOSPI", aliases: "에쓰오일,에스오일" },
+  ];
+  const names = (q: string, fav?: Set<string>) => searchStocks(stocks, q, fav).map((s) => s.name);
+
+  it("한글 별칭으로 영문 이름 종목을 찾는다", () => {
+    expect(names("네이버")).toEqual(["NAVER"]);
+    expect(names("하이닉스")).toEqual(["SK하이닉스"]);
+    expect(names("에쓰오일")).toEqual(["S-Oil"]);
+  });
+
+  it("대소문자·공백·기호를 무시한다", () => {
+    expect(names("naver")).toEqual(["NAVER"]);
+    expect(names("s oil")).toEqual(["S-Oil"]);
+    expect(names("삼성 전자")).toEqual(["삼성전자", "삼성전자우"]);
+  });
+
+  it("초성과 종목코드로도 찾는다", () => {
+    expect(names("ㅅㅅㅈㅈ")).toEqual(["삼성전자", "삼성전자우"]);
+    expect(names("0354")).toEqual(["NAVER"]);
+  });
+
+  it("정확히 일치하는 것이 먼저, 같은 점수면 관심 종목이 먼저", () => {
+    expect(names("삼전")[0]).toBe("삼성전자");
+    expect(names("삼성전", new Set(["005935"]))).toEqual(["삼성전자우", "삼성전자"]);
+  });
+
+  it("초성 변환", () => {
+    expect(toChoseong("삼성전자")).toBe("ㅅㅅㅈㅈ");
+    expect(normalizeQuery(" S-Oil ")).toBe("soil");
   });
 });

@@ -112,10 +112,20 @@ Cloudflare Worker (Hono) ──────────┤
   ```
 
 ### 로고 애니메이션
-차트가 오르다가 꼭대기에 BUY! 핀이 꽂히는 순간 폭락하고, "샀습니다"가 털썩 주저앉은 뒤 삐에로가 "하면 그만이야~"를 외칩니다.
-- 삐에로는 직접 그린 SVG 일러스트입니다.
-- 사용 권한이 있는 이미지를 `web/public/clown.png`로 넣으면 그 이미지로 자동 교체됩니다.
-- 운영체제에서 "동작 줄이기"를 켠 사용자에게는 애니메이션 없이 보입니다.
+4초마다 반복합니다. 상한가 선까지 치솟음 → 꼭대기에서 **BUY!** → 하한가 선까지 폭락(이때 BUY!는 사라짐) → 잠시 멈춤 → 초기화.
+- "샀습니다" 글자는 폭락과 함께 파랗게 주저앉습니다.
+- 운영체제에서 "동작 줄이기"를 켠 사용자에게는 오르는 선만 정지 화면으로 보입니다.
+
+### 종목 검색 · 관심 종목
+- 전체 종목 목록을 브라우저가 한 번만 받아 두고(최대 6시간 캐시) 입력하는 즉시 거릅니다. 서버 왕복이 없습니다.
+- 대소문자·띄어쓰기·기호를 무시합니다. 예: `s oil` → S-Oil, `삼성 전자` → 삼성전자
+- 영문 이름의 한글 표기와 줄임말을 **별칭**으로 찾습니다. 예: 네이버 → NAVER, 삼전 → 삼성전자, 하이닉스 → SK하이닉스, 엔솔 → LG에너지솔루션
+  - 별칭은 `stocks.aliases`에 쉼표로 넣습니다(`migrations/0006_search_favorites.sql`).
+- **초성**으로도 찾습니다. 예: `ㅅㅅㅈㅈ` → 삼성전자
+- 종목 화면의 ☆를 누르면 **관심 종목(★)** 으로 등록됩니다(최대 50개).
+  - 검색 결과에서 ★로 표시되고 위쪽에 보입니다.
+  - 검색창을 비운 채 누르면 관심 종목 목록이 나옵니다.
+  - 내 계좌 화면에도 관심 종목이 보입니다.
 
 ## 로컬 실행
 
@@ -159,6 +169,15 @@ npm run typecheck && npm test && npm run build
    | `KIS_APP_SECRET` | 선택 | 한국투자증권 앱시크릿 |
 
 5. `main`에 push하거나 *Actions → Deploy to Cloudflare → Run workflow*를 실행합니다. 배포 주소는 `https://he-bought-dump-it.<서브도메인>.workers.dev`입니다.
+
+### Cloudflare Workers Builds(대시보드의 Git 연동)를 켠 경우
+GitHub Actions(`deploy.yml`)가 이미 마이그레이션과 배포를 처리하므로 **Workers Builds는 꺼 두는 것을 권장합니다.**
+- 끄는 곳: Cloudflare 대시보드 → Workers & Pages → he-bought-dump-it → Settings → Build → Disconnect
+- 켜 둔다면 배포가 두 번 일어납니다. 또 Workers Builds는 D1 마이그레이션을 적용하지 않아서, 새 마이그레이션이 들어간 변경은 잠깐 오류가 날 수 있습니다.
+  - 그래서 Workers Builds의 Deploy command는 `npm run deploy`(마이그레이션 적용 → 배포)로 바꿔 주세요.
+- 저장소 설정은 어느 쪽으로 배포해도 동작하게 해 두었습니다.
+  - `wrangler.jsonc`에 실제 D1 ID가 들어 있습니다.
+  - `build.command`로 배포 전에 프론트엔드를 자동으로 빌드합니다.
 
 ### 한국투자증권 Open API 키
 [KIS Developers](https://apiportal.koreainvestment.com)에서 계좌를 연결하고 앱키와 앱시크릿을 발급받습니다. 연동 방식은 공식 샘플 [koreainvestment/open-trading-api](https://github.com/koreainvestment/open-trading-api)를 따릅니다.

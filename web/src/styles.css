@@ -34,6 +34,8 @@
 html,
 body {
   margin: 0;
+  /* 어떤 요소가 넘치더라도 페이지 전체가 가로로 스크롤되지 않게 한다 */
+  overflow-x: clip;
   background: var(--bg);
   color: var(--text);
   font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR",
@@ -164,9 +166,20 @@ input:focus {
   gap: 16px;
   font-size: 14px;
 }
-.header nav a {
+.header nav a,
+.header nav button {
   text-decoration: none;
   color: var(--muted);
+  white-space: nowrap;
+}
+.header .nickname-line {
+  min-width: 0;
+  max-width: 220px;
+}
+.header .nickname-line .nick {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .header nav a.active {
   color: var(--text);
@@ -748,8 +761,22 @@ th {
     flex-basis: 100%;
     max-width: none;
   }
+  /* 메뉴는 한 줄로 두고, 넘치면 메뉴 줄만 가로로 밀어서 본다 */
   .header nav {
-    gap: 12px;
+    order: 2;
+    flex-basis: 100%;
+    margin-left: 0;
+    gap: 16px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .header nav::-webkit-scrollbar {
+    display: none;
+  }
+  .header nav .nickname-line {
+    margin-left: auto;
+    max-width: 150px;
   }
   main {
     padding: 16px 16px 40px;
@@ -781,13 +808,13 @@ th {
   --logo-cycle: 4s;
 }
 .anim-logo-chart {
-  width: 40px;
-  height: 24px;
+  width: 36px;
+  height: 32px;
   overflow: visible;
 }
 .anim-logo.lg .anim-logo-chart {
-  width: 84px;
-  height: 48px;
+  width: 80px;
+  height: 70px;
 }
 .anim-logo.lg {
   font-size: 30px;
@@ -795,10 +822,22 @@ th {
 }
 .anim-logo-chart path {
   fill: none;
-  stroke-width: 3.2;
+  stroke-width: 3.4;
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-dasharray: 100;
+}
+.anim-logo-chart .limit {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.45;
+}
+.anim-logo-chart .limit.upper {
+  stroke: var(--up);
+}
+.anim-logo-chart .limit.lower {
+  stroke: var(--down);
 }
 .anim-logo-chart .rise {
   stroke: var(--up);
@@ -809,7 +848,7 @@ th {
   animation: logo-crash var(--logo-cycle) ease-in infinite;
 }
 .anim-logo-chart .pin {
-  transform-origin: 40px 7px;
+  transform-origin: 40px 6px;
   transform-box: view-box;
   animation: logo-pin var(--logo-cycle) ease-out infinite;
 }
@@ -820,7 +859,7 @@ th {
 }
 .anim-logo-chart .pin text {
   fill: var(--accent);
-  font-size: 7px;
+  font-size: 8px;
   font-weight: 900;
   font-family: inherit;
 }
@@ -833,16 +872,18 @@ th {
   animation: logo-drop var(--logo-cycle) cubic-bezier(0.3, 0.7, 0.4, 1.4) infinite;
 }
 
+/* 0~34% 상한가까지 상승 → 36~44% BUY! → 46~60% 하한가까지 폭락(BUY! 사라짐) → 60~86% 정지 → 86~100% 초기화 */
 @keyframes logo-rise {
   0% {
     stroke-dashoffset: 100;
     opacity: 1;
   }
-  38%,
-  88% {
+  34%,
+  86% {
     stroke-dashoffset: 0;
     opacity: 1;
   }
+  94%,
   100% {
     stroke-dashoffset: 0;
     opacity: 0;
@@ -854,11 +895,12 @@ th {
     stroke-dashoffset: 100;
     opacity: 1;
   }
-  58%,
-  88% {
+  60%,
+  86% {
     stroke-dashoffset: 0;
     opacity: 1;
   }
+  94%,
   100% {
     stroke-dashoffset: 0;
     opacity: 0;
@@ -866,40 +908,41 @@ th {
 }
 @keyframes logo-pin {
   0%,
-  36% {
+  34% {
     transform: scale(0);
     opacity: 0;
   }
-  42% {
+  39% {
     transform: scale(1.35);
     opacity: 1;
   }
-  46%,
-  88% {
+  43%,
+  48% {
     transform: scale(1);
     opacity: 1;
   }
+  58%,
   100% {
-    transform: scale(1);
+    transform: scale(0.6);
     opacity: 0;
   }
 }
 @keyframes logo-drop {
   0%,
-  50% {
+  52% {
     transform: translateY(0) rotate(0);
     color: var(--up);
   }
-  58% {
+  60% {
     transform: translateY(0.28em) rotate(-8deg);
     color: var(--down);
   }
-  66% {
+  68% {
     transform: translateY(0.12em) rotate(4deg);
     color: var(--down);
   }
-  74%,
-  90% {
+  76%,
+  88% {
     transform: translateY(0.2em) rotate(0);
     color: var(--down);
   }
@@ -909,112 +952,16 @@ th {
   }
 }
 
-/* 급락 직후 튀어나오는 삐에로 */
-.anim-logo-stage {
-  position: relative;
-  display: inline-flex;
-}
-.clown {
-  position: absolute;
-  /* 폭락한 차트 끝자락에서 튀어나온다 */
-  left: 58%;
-  top: 22%;
-  pointer-events: none;
-  transform-origin: 50% 90%;
-  animation: clown-pop var(--logo-cycle) cubic-bezier(0.3, 0.7, 0.4, 1.6) infinite;
-  z-index: 2;
-}
-.clown-svg,
-.clown-img {
-  display: block;
-  width: 28px;
-  height: 28px;
-  object-fit: contain;
-  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 0.35));
-}
-/* 헤더(작은 로고): 말풍선은 로고 아래쪽으로 내려온다 */
-.clown-bubble {
-  position: absolute;
-  left: 70%;
-  top: calc(100% + 6px);
-  padding: 4px 10px;
-  border-radius: 10px;
-  background: #fff;
-  color: #191f28;
-  font-size: 12px;
-  font-weight: 800;
-  white-space: nowrap;
-  box-shadow: 0 4px 12px rgb(0 0 0 / 0.3);
-}
-.clown-bubble::before {
-  content: "";
-  position: absolute;
-  left: 8px;
-  top: -5px;
-  border: 5px solid transparent;
-  border-top: 0;
-  border-bottom-color: #fff;
-}
-/* 큰 로고(로그인 화면): 삐에로가 더 크고 말풍선은 위쪽 */
-.anim-logo.lg .clown {
-  left: 60%;
-  top: 10%;
-}
-.anim-logo.lg .clown-svg,
-.anim-logo.lg .clown-img {
-  width: 56px;
-  height: 56px;
-}
-.anim-logo.lg .clown-bubble {
-  left: 75%;
-  top: auto;
-  bottom: calc(100% + 4px);
-  font-size: 15px;
-  padding: 5px 12px;
-}
-.anim-logo.lg .clown-bubble::before {
-  top: auto;
-  bottom: -5px;
-  border: 5px solid transparent;
-  border-bottom: 0;
-  border-top-color: #fff;
-}
-@keyframes clown-pop {
-  0%,
-  60% {
-    transform: scale(0) rotate(-20deg);
-    opacity: 0;
-  }
-  66% {
-    transform: scale(1.15) rotate(6deg);
-    opacity: 1;
-  }
-  70% {
-    transform: scale(1) rotate(-3deg);
-  }
-  76% {
-    transform: scale(1.05) rotate(3deg);
-  }
-  82%,
-  90% {
-    transform: scale(1) rotate(0);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(0.6) rotate(0);
-    opacity: 0;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .anim-logo-chart path,
   .anim-logo-chart .pin,
-  .anim-logo-text .drop,
-  .clown {
+  .anim-logo-text .drop {
     animation: none;
   }
-  .clown {
-    display: none;
+  /* 움직임을 줄인 경우: 오르는 선만 보여 주고 BUY!·폭락 선은 숨긴다 */
+  .anim-logo-chart .pin,
+  .anim-logo-chart .crash {
+    opacity: 0;
   }
   .anim-logo-chart path {
     stroke-dashoffset: 0;
@@ -1195,13 +1142,21 @@ button.wide {
   flex-direction: column;
 }
 .switch {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
 }
+/* 실제 체크박스는 스위치 그림 위에 겹쳐 숨긴다 (전역 input { width: 100% }가 적용되지 않게 크기를 고정) */
 .switch input {
   position: absolute;
+  left: 0;
+  top: 0;
+  width: 42px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
   opacity: 0;
   pointer-events: none;
 }
@@ -1520,4 +1475,36 @@ button.danger {
 }
 main > section.card + section.card {
   margin-top: 16px;
+}
+
+/* ---------- 관심 종목 · 검색 ---------- */
+
+.fav-star {
+  color: #fcc419;
+  margin-right: 4px;
+}
+.fav-button {
+  border: none;
+  background: none;
+  padding: 0 2px;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--muted);
+  align-self: center;
+}
+.fav-button.on {
+  color: #fcc419;
+}
+.search-caption {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.search-results li > button > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chip.fav {
+  border-color: color-mix(in srgb, #fcc419 45%, var(--border));
 }

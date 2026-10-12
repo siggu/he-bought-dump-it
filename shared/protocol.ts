@@ -79,6 +79,8 @@ export interface MeResponse {
     isAdmin: boolean;
   };
   holdings: HoldingView[];
+  /** 관심 종목(별표) 종목코드 */
+  favorites: string[];
   totals: {
     evaluation: number;
     total: number;
@@ -98,6 +100,8 @@ export interface StockInfo {
   symbol: string;
   name: string;
   market: string;
+  /** 검색용 별칭 (쉼표 구분) */
+  aliases?: string;
 }
 
 export interface OrderRow {
