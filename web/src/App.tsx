@@ -10,6 +10,7 @@ import { AuthPage } from "./pages/AuthPage";
 import { Dashboard } from "./pages/Dashboard";
 import { Game } from "./pages/Game";
 import { History } from "./pages/History";
+import { Admin } from "./pages/Admin";
 import { Arena } from "./pages/Arena";
 import { MyProfilePage, ProfileSetup, UserProfilePage } from "./pages/Profile";
 import { StockDetail } from "./pages/StockDetail";
@@ -60,6 +61,7 @@ function Shell() {
         <Route path="/history" element={<History />} />
         <Route path="/game" element={<Game />} />
         <Route path="/arena" element={<Arena />} />
+        {me.user.isAdmin && <Route path="/admin" element={<Admin />} />}
         <Route path="/profile" element={<MyProfilePage />} />
         <Route path="/u/:nickname" element={<UserProfilePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -125,6 +127,7 @@ function Header() {
             </NavLink>
             <NavLink to="/history">거래내역</NavLink>
             <NavLink to="/arena">개미 광장</NavLink>
+            {me.user.isAdmin && <NavLink to="/admin">관리</NavLink>}
             {me.user.isBankrupt && <NavLink to="/game">미니게임</NavLink>}
           </>
         )}

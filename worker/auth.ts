@@ -15,6 +15,9 @@ export interface SessionUser {
   id: number;
   email: string;
   nickname: string;
+  role: "user" | "admin";
+  suspended_at: number | null;
+  suspended_reason: string | null;
 }
 
 export type AppEnv = { Bindings: Env; Variables: { user: SessionUser } };
@@ -106,7 +109,7 @@ export async function sessionUser(c: Context<AppEnv>): Promise<SessionUser | nul
   const token = getCookie(c, SESSION_COOKIE);
   if (!token) return null;
   const row = await c.env.DB.prepare(
-    `SELECT u.id, u.email, u.nickname
+    `SELECT u.id, u.email, u.nickname, u.role, u.suspended_at, u.suspended_reason
        FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = ? AND s.expires_at > ?`,
   )
@@ -115,9 +118,23 @@ export async function sessionUser(c: Context<AppEnv>): Promise<SessionUser | nul
   return row ?? null;
 }
 
+export function suspendedMessage(reason: string | null): string {
+  return `이용이 정지된 계정입니다.${reason ? ` (사유: ${reason})` : ""}`;
+}
+
 export const requireAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
   const user = await sessionUser(c);
   if (!user) return c.json({ error: "로그인이 필요합니다." }, 401);
+  if (user.suspended_at) return c.json({ error: suspendedMessage(user.suspended_reason), suspended: true }, 403);
+  c.set("user", user);
+  await next();
+};
+
+/** 관리자 전용. 관리자 여부는 매 요청 DB의 role로 확인한다. */
+export const requireAdmin: MiddlewareHandler<AppEnv> = async (c, next) => {
+  const user = await sessionUser(c);
+  if (!user) return c.json({ error: "로그인이 필요합니다." }, 401);
+  if (user.role !== "admin" || user.suspended_at) return c.json({ error: "관리자만 접근할 수 있습니다." }, 403);
   c.set("user", user);
   await next();
 };

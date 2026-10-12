@@ -75,6 +75,8 @@ export interface MeResponse {
     featuredBadge: PublicBadge | null;
     /** 가입 직후 공개 범위 설정을 마쳤는지 */
     profileSetupDone: boolean;
+    /** 관리자 계정인지 (/admin 메뉴 표시용, 권한 검사는 서버가 한다) */
+    isAdmin: boolean;
   };
   holdings: HoldingView[];
   totals: {

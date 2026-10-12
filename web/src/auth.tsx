@@ -19,7 +19,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setMe(await api.me());
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) setMe(null);
+      // 401: 로그인 안 됨, 403: 정지된 계정 → 로그아웃 상태로 (로그인할 때 정지 사유를 보여준다)
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) setMe(null);
       else throw e;
     }
   }, []);

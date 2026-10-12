@@ -12,8 +12,10 @@ import {
   clearLoginAttempts,
   endSession,
   passwordIterations,
+  requireAdmin,
   requireAuth,
   sameOriginJson,
+  suspendedMessage,
   sessionUser,
   startSession,
 } from "./auth";
@@ -29,6 +31,7 @@ import {
   updateProfile,
 } from "./profile";
 import { publicBadge } from "./badges";
+import { forceNickname, recentActions, searchUsers, suspendUser, unsuspendUser } from "./admin";
 import { arenaState, createDuel, createSwap, prepareRaid, respond, submitRaid } from "./arena";
 import { DIFFICULTIES, answerGame, gameStatus, startGame } from "./game";
 import { INITIAL_CASH } from "./rules";
@@ -102,12 +105,13 @@ app.post("/auth/login", async (c) => {
   if (!(await allowLoginAttempt(c.env, limitKey))) {
     return c.json({ error: "로그인 시도가 너무 많습니다. 15분 뒤 다시 시도해 주세요." }, 429);
   }
-  const user = await c.env.DB.prepare("SELECT id, password_hash FROM users WHERE email = ?")
+  const user = await c.env.DB.prepare("SELECT id, password_hash, suspended_at, suspended_reason FROM users WHERE email = ?")
     .bind(mail)
-    .first<{ id: number; password_hash: string }>();
+    .first<{ id: number; password_hash: string; suspended_at: number | null; suspended_reason: string | null }>();
   if (!user || !(await passwordHasher(c.env).verify(String(password ?? ""), user.password_hash))) {
     return c.json({ error: "이메일 또는 비밀번호가 올바르지 않습니다." }, 401);
   }
+  if (user.suspended_at) return c.json({ error: suspendedMessage(user.suspended_reason) }, 403);
   await clearLoginAttempts(c.env, limitKey);
   await startSession(c, user.id);
   return c.json({ ok: true });
@@ -125,7 +129,7 @@ app.get("/ws", async (c) => {
   const origin = c.req.header("Origin");
   if (origin && origin !== new URL(c.req.url).origin) return c.json({ error: "허용되지 않은 출처입니다." }, 403);
   const user = await sessionUser(c);
-  if (!user) return c.json({ error: "로그인이 필요합니다." }, 401);
+  if (!user || user.suspended_at) return c.json({ error: "로그인이 필요합니다." }, 401);
   const headers = new Headers(c.req.raw.headers);
   headers.set("X-User-Id", String(user.id));
   return priceHub(c.env).fetch(new Request(c.req.raw.url, { headers }));
@@ -281,7 +285,7 @@ app.get("/hall-of-fame", async (c) => {
   // 파산 횟수를 공개한 사람만 올라간다.
   const { results } = await c.env.DB.prepare(
     `SELECT nickname, bankrupt_count AS bankruptCount, featured_badge AS featured FROM users
-      WHERE bankrupt_count > 0 AND json_extract(privacy, '$.bankruptCount') = 1
+      WHERE bankrupt_count > 0 AND json_extract(privacy, '$.bankruptCount') = 1 AND suspended_at IS NULL
       ORDER BY bankrupt_count DESC, id LIMIT 10`,
   ).all<{ nickname: string; bankruptCount: number; featured: string | null }>();
   return c.json({
@@ -292,6 +296,31 @@ app.get("/hall-of-fame", async (c) => {
     })),
   });
 });
+
+// ------------------------------------------------------------- 관리자
+
+app.use("/admin/*", requireAdmin);
+
+app.get("/admin/users", async (c) => c.json({ users: await searchUsers(c.env, (c.req.query("q") ?? "").trim()) }));
+
+app.post("/admin/users/:id/nickname", async (c) => {
+  const { nickname } = await body<{ nickname: string }>(c.req.raw);
+  const next = await forceNickname(c.env, c.get("user").id, Number(c.req.param("id")), String(nickname ?? ""));
+  return c.json({ nickname: next });
+});
+
+app.post("/admin/users/:id/suspend", async (c) => {
+  const { reason } = await body<{ reason: string }>(c.req.raw);
+  await suspendUser(c.env, c.get("user").id, Number(c.req.param("id")), String(reason ?? ""));
+  return c.json({ ok: true });
+});
+
+app.post("/admin/users/:id/unsuspend", async (c) => {
+  await unsuspendUser(c.env, c.get("user").id, Number(c.req.param("id")));
+  return c.json({ ok: true });
+});
+
+app.get("/admin/actions", async (c) => c.json({ actions: await recentActions(c.env) }));
 
 app.all("*", (c) => c.json({ error: "Not Found" }, 404));
 

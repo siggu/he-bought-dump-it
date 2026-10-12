@@ -15,6 +15,18 @@ import type {
   StockInfo,
 } from "../../shared/protocol";
 
+export interface AdminUser {
+  id: number;
+  email: string;
+  nickname: string;
+  role: string;
+  createdAt: number;
+  cash: number;
+  bankruptCount: number;
+  suspendedAt: number | null;
+  suspendedReason: string | null;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -56,6 +68,16 @@ export const api = {
   game: () => request<GameStatus>("GET", "/game"),
   gameStart: (difficulty: GameDifficulty) => request<GameQuestion>("POST", "/game/start", { difficulty }),
   gameAnswer: (gameId: string, choice: string) => request<GameResult>("POST", "/game/answer", { gameId, choice }),
+  adminUsers: (q: string) => request<{ users: AdminUser[] }>("GET", `/admin/users?q=${encodeURIComponent(q)}`),
+  adminNickname: (id: number, nickname: string) =>
+    request<{ nickname: string }>("POST", `/admin/users/${id}/nickname`, { nickname }),
+  adminSuspend: (id: number, reason: string) => request<{ ok: true }>("POST", `/admin/users/${id}/suspend`, { reason }),
+  adminUnsuspend: (id: number) => request<{ ok: true }>("POST", `/admin/users/${id}/unsuspend`),
+  adminActions: () =>
+    request<{ actions: { id: number; action: string; detail: string; createdAt: number; admin: string; target: string }[] }>(
+      "GET",
+      "/admin/actions",
+    ),
   hallOfFame: () =>
     request<{ ranking: { nickname: string; bankruptCount: number; featuredBadge: PublicBadge | null }[] }>(
       "GET",

@@ -122,7 +122,7 @@ export async function markBadgesSeen(env: Env, userId: number): Promise<void> {
 
 /** 다른 사람에게 보이는 프로필. 공개하지 않은 항목은 null */
 export async function publicProfile(env: Env, nickname: string): Promise<PublicProfile> {
-  const row = await env.DB.prepare("SELECT id FROM users WHERE nickname = ?").bind(nickname).first<{ id: number }>();
+  const row = await env.DB.prepare("SELECT id FROM users WHERE nickname = ? AND suspended_at IS NULL").bind(nickname).first<{ id: number }>();
   if (!row) throw new UserError("존재하지 않는 사용자입니다.", 404);
   const user = await loadUser(env, row.id);
   const p = parsePrivacy(user.privacy);

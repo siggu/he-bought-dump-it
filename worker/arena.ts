@@ -176,6 +176,8 @@ async function findTarget(env: Env, me: UserRow, nickname: string, type: Interac
     throw new UserError(`${target.nickname}님은 ${TYPE_NAME[type]}을(를) 받지 않습니다.`, 403);
   }
   if (target.is_bankrupt) throw new UserError("파산한 사람에게는 걸 수 없습니다.", 409);
+  const suspended = await env.DB.prepare("SELECT suspended_at FROM users WHERE id = ?").bind(target.id).first<{ suspended_at: number | null }>();
+  if (suspended?.suspended_at) throw new UserError("존재하지 않는 사용자입니다.", 404);
   return target;
 }
 
@@ -588,7 +590,7 @@ export async function arenaState(env: Env, userId: number, target?: string): Pro
   const open = (v: InteractionView) => v.status === "pending" || v.status === "active";
   const { results: players } = await env.DB.prepare(
     `SELECT nickname, featured_badge, interaction_settings FROM users
-      WHERE id <> ? AND is_bankrupt = 0
+      WHERE id <> ? AND is_bankrupt = 0 AND suspended_at IS NULL
         AND (json_extract(interaction_settings, '$.allowSwap') = 1
           OR json_extract(interaction_settings, '$.allowRaid') = 1
           OR json_extract(interaction_settings, '$.allowDuel') = 1)
@@ -600,7 +602,7 @@ export async function arenaState(env: Env, userId: number, target?: string): Pro
   // 프로필에서 "도전하기"로 들어온 상대는 무작위 목록에 없어도 넣어 준다.
   if (target && !players.some((p) => p.nickname === target)) {
     const t = await env.DB.prepare(
-      "SELECT nickname, featured_badge, interaction_settings FROM users WHERE nickname = ? AND id <> ? AND is_bankrupt = 0",
+      "SELECT nickname, featured_badge, interaction_settings FROM users WHERE nickname = ? AND id <> ? AND is_bankrupt = 0 AND suspended_at IS NULL",
     )
       .bind(target, userId)
       .first<{ nickname: string; featured_badge: string | null; interaction_settings: string }>();

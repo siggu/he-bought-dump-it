@@ -40,6 +40,7 @@ export interface UserRow {
   nickname_changed_at: number | null;
   privacy: string;
   interaction_settings: string;
+  role: string;
   created_at: number;
 }
 
@@ -61,7 +62,7 @@ export class UserError extends Error {
 export async function loadUser(env: Env, userId: number): Promise<UserRow> {
   const user = await env.DB.prepare(
     `SELECT id, email, nickname, cash, is_bankrupt, bankrupt_count, last_salary_month, featured_badge,
-            profile_setup_done, nickname_changed_at, privacy, interaction_settings, created_at
+            profile_setup_done, nickname_changed_at, privacy, interaction_settings, role, created_at
        FROM users WHERE id = ?`,
   )
     .bind(userId)
@@ -221,6 +222,7 @@ export async function buildMe(env: Env, userId: number): Promise<MeResponse> {
       salaryAmount: SALARY_AMOUNT,
       featuredBadge: user.featured_badge ? publicBadge(user.featured_badge) : null,
       profileSetupDone: user.profile_setup_done === 1,
+      isAdmin: user.role === "admin",
     },
     holdings: views,
     totals: {
