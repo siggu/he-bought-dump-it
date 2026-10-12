@@ -1,0 +1,62 @@
+name: 관리자 지정
+
+# 저장소에 쓰기 권한이 있는 사람만 실행할 수 있는 수동 워크플로.
+# 먼저 사이트에 가입한 뒤, 그 이메일로 이 워크플로를 실행하면 관리자 권한이 부여된다.
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: "관리자로 지정(또는 해제)할 계정의 이메일"
+        required: true
+      action:
+        description: "grant: 관리자 지정 / revoke: 관리자 해제"
+        required: true
+        default: grant
+        type: choice
+        options: [grant, revoke]
+
+jobs:
+  role:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      D1_NAME: he-bought-dump-it
+      EMAIL: ${{ inputs.email }}
+      ACTION: ${{ inputs.action }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # SQL에 들어가므로 따옴표·공백이 없는 이메일 형식만 허용한다.
+      - name: 입력 확인
+        run: |
+          EMAIL_LC="$(printf '%s' "$EMAIL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+          if ! printf '%s' "$EMAIL_LC" | grep -Eq '^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$'; then
+            echo "::error::이메일 형식이 올바르지 않습니다."; exit 1
+          fi
+          echo "EMAIL_LC=$EMAIL_LC" >> "$GITHUB_ENV"
+
+      - name: D1 데이터베이스 ID 찾기
+        run: |
+          ID="$(npx wrangler d1 list --json 2>/dev/null | node -e '
+            let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
+              const db = JSON.parse(s).find(d => d.name === process.env.D1_NAME);
+              if (db) console.log(db.uuid);
+            });')"
+          if [ -z "$ID" ]; then echo "::error::D1 데이터베이스가 없습니다. 먼저 배포해 주세요."; exit 1; fi
+          sed -i "s/00000000-0000-0000-0000-000000000000/$ID/" wrangler.jsonc
+
+      - name: 권한 변경
+        run: |
+          ROLE=$([ "$ACTION" = "grant" ] && echo admin || echo user)
+          OUT="$(npx wrangler d1 execute DB --remote --json \
+            --command "UPDATE users SET role = '$ROLE' WHERE email = '$EMAIL_LC'")"
+          echo "$OUT"
+          CHANGES="$(printf '%s' "$OUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s);console.log(r[0]?.meta?.changes ?? 0)})')"
+          if [ "$CHANGES" != "1" ]; then echo "::error::해당 이메일로 가입한 계정이 없습니다."; exit 1; fi
+          echo "::notice::$EMAIL_LC → $ROLE"

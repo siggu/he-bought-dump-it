@@ -1,0 +1,79 @@
+name: Deploy to Cloudflare
+
+# main 브랜치에 push되면 Cloudflare Workers로 배포한다.
+# 필요한 GitHub Secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+# 선택 Secrets: KIS_APP_KEY, KIS_APP_SECRET (없으면 모의 시세로 동작)
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      D1_NAME: he-bought-dump-it
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+      - name: Cloudflare 설정 확인
+        id: check
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID 시크릿이 없어 배포를 건너뜁니다. README의 배포 방법을 참고하세요."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # D1 데이터베이스가 없으면 만들고, 그 ID를 wrangler.jsonc에 채워 넣는다.
+      - name: D1 데이터베이스 준비
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          find_id() {
+            npx wrangler d1 list --json 2>/dev/null | node -e '
+              let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
+                const db = JSON.parse(s).find(d => d.name === process.env.D1_NAME);
+                if (db) console.log(db.uuid);
+              });'
+          }
+          ID="$(find_id)"
+          if [ -z "$ID" ]; then
+            npx wrangler d1 create "$D1_NAME" --location apac < /dev/null
+            ID="$(find_id)"
+          fi
+          if [ -z "$ID" ]; then echo "::error::D1 데이터베이스 ID를 찾지 못했습니다."; exit 1; fi
+          sed -i "s/00000000-0000-0000-0000-000000000000/$ID/" wrangler.jsonc
+          echo "D1 database: $ID"
+
+      - name: DB 마이그레이션
+        if: steps.check.outputs.skip != 'true'
+        run: npx wrangler d1 migrations apply DB --remote
+
+      - name: 배포
+        if: steps.check.outputs.skip != 'true'
+        run: npx wrangler deploy
+
+      - name: KIS 시크릿 등록
+        if: steps.check.outputs.skip != 'true'
+        env:
+          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+        run: |
+          if [ -n "$KIS_APP_KEY" ] && [ -n "$KIS_APP_SECRET" ]; then
+            printf '%s' "$KIS_APP_KEY" | npx wrangler secret put KIS_APP_KEY
+            printf '%s' "$KIS_APP_SECRET" | npx wrangler secret put KIS_APP_SECRET
+          else
+            echo "::notice::KIS_APP_KEY / KIS_APP_SECRET 시크릿이 없어 모의 시세로 동작합니다."
+          fi
