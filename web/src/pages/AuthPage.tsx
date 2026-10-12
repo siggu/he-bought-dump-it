@@ -42,12 +42,23 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
         <h1>{mode === "login" ? "로그인" : "회원가입"}</h1>
         <label>
           이메일
-          <input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+          {/* 로그인 아이디는 이메일. 비밀번호 관리자가 이 칸을 아이디로 저장하도록 username으로 표시한다 */}
+          <input
+            type="email"
+            name="username"
+            id="username"
+            autoComplete="username"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
         </label>
         {mode === "signup" && (
           <label>
             닉네임 <small className="muted">(2~16자, 한글·영문·숫자·_ / 변경은 3일에 한 번)</small>
             <input
+              name="nickname"
+              autoComplete="nickname"
               required
               minLength={2}
               maxLength={16}
@@ -62,6 +73,8 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
           비밀번호 {mode === "signup" && <small className="muted">(8자 이상)</small>}
           <input
             type="password"
+            name="password"
+            id="password"
             autoComplete={mode === "login" ? "current-password" : "new-password"}
             required
             minLength={mode === "signup" ? 8 : undefined}

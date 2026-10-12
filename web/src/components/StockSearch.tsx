@@ -23,6 +23,7 @@ export function StockSearch({
   const [active, setActive] = useState(0);
   const [catalog, setCatalog] = useState<StockInfo[]>(catalogNow);
   const box = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLUListElement>(null);
   const favorites = useMemo(() => new Set(me?.favorites ?? []), [me?.favorites]);
 
   useEffect(() => {
@@ -36,6 +37,12 @@ export function StockSearch({
   }, [q, catalog, favorites]);
 
   useEffect(() => setActive(0), [q]);
+
+  // 화살표로 고른 항목이 목록 밖으로 나가면 그 항목이 보이도록 목록을 스크롤한다.
+  useEffect(() => {
+    if (!open) return;
+    list.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [active, open]);
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -65,20 +72,26 @@ export function StockSearch({
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={(e) => {
-          if (e.key === "ArrowDown") setActive((a) => Math.min(a + 1, results.length - 1));
-          else if (e.key === "ArrowUp") setActive((a) => Math.max(a - 1, 0));
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault(); // 입력창 커서가 맨 앞/뒤로 튀지 않게
+            setOpen(true);
+            setActive((a) =>
+              e.key === "ArrowDown" ? Math.min(a + 1, results.length - 1) : Math.max(a - 1, 0),
+            );
+          }
           else if (e.key === "Enter" && results[active]) pick(results[active]);
           else if (e.key === "Escape") setOpen(false);
         }}
       />
       {open && (results.length > 0 || q.trim()) && (
-        <ul className="search-results" role="listbox">
+        <ul className="search-results" role="listbox" ref={list}>
           {!q.trim() && <li className="search-caption">★ 관심 종목</li>}
           {results.map((s, i) => (
-            <li key={s.symbol} role="option" aria-selected={i === active}>
+            <li key={s.symbol} role="option" aria-selected={i === active} data-index={i}>
               <button
                 type="button"
                 className={i === active ? "active" : ""}
+                onMouseEnter={() => setActive(i)}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   pick(s);
