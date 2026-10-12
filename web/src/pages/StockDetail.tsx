@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { MeResponse, StockInfo } from "../../../shared/protocol";
+import type { MeResponse, Quote, StockInfo } from "../../../shared/protocol";
 import { api } from "../api";
 import { useAuth, useMe } from "../auth";
 import { ChartPanel } from "../components/ChartPanel";
@@ -15,18 +15,25 @@ export function StockDetail() {
   const { setMe } = useAuth();
   const symbol = (useParams().symbol ?? "").toUpperCase();
   const [stock, setStock] = useState<StockInfo | null>(null);
+  const [restQuote, setRestQuote] = useState<Quote | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const rt = useRealtime(symbol);
   const holding = me.holdings.find((h) => h.symbol === symbol) ?? null;
-  const price = rt.quote?.price ?? holding?.price ?? null;
+  // 실시간 스냅샷이 오기 전에는 REST로 받은 시세를 먼저 보여 준다.
+  const quote = rt.quote ?? restQuote;
+  const price = quote?.price ?? holding?.price ?? null;
 
   useEffect(() => {
     setStock(null);
+    setRestQuote(null);
     setError(null);
     api
       .stock(symbol)
-      .then((r) => setStock(r.stock))
+      .then((r) => {
+        setStock(r.stock);
+        setRestQuote(r.quote);
+      })
       .catch((e: Error) => setError(e.message));
   }, [symbol]);
 
@@ -59,9 +66,9 @@ export function StockDetail() {
       <div className="grid">
         <div className="col-main">
           <section className="card">
-            <QuoteHeader name={stock?.name ?? symbol} symbol={symbol} quote={rt.quote} live={rt.live} badge={stock?.market} />
+            <QuoteHeader name={stock?.name ?? symbol} symbol={symbol} quote={quote} live={rt.live} badge={stock?.market} />
           </section>
-          <ChartPanel symbol={symbol} quote={rt.quote} ticks={rt.ticks} marketOpen={rt.status.market === "open"} />
+          <ChartPanel symbol={symbol} quote={quote} ticks={rt.ticks} marketOpen={rt.status.market === "open"} />
           {rt.status.error && <p className="error">{rt.status.error}</p>}
         </div>
         <div className="col-side">

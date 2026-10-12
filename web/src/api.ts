@@ -12,6 +12,7 @@ import type {
   Privacy,
   PublicBadge,
   PublicProfile,
+  Quote,
   StockInfo,
 } from "../../shared/protocol";
 
@@ -55,7 +56,7 @@ export const api = {
   logout: () => request<{ ok: true }>("POST", "/auth/logout"),
   me: () => request<MeResponse>("GET", "/me"),
   search: (q: string) => request<{ results: StockInfo[] }>("GET", `/stocks/search?q=${encodeURIComponent(q)}`),
-  stock: (symbol: string) => request<{ stock: StockInfo }>("GET", `/stocks/${symbol}`),
+  stock: (symbol: string) => request<{ stock: StockInfo; quote: Quote | null }>("GET", `/stocks/${symbol}`),
   daily: (symbol: string) => request<{ candles: Candle[] }>("GET", `/stocks/${symbol}/daily`),
   order: (symbol: string, side: "buy" | "sell", quantity: number) =>
     request<{ result: { price: number; quantity: number; total: number }; me: MeResponse }>("POST", "/orders", {
