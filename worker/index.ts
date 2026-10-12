@@ -20,6 +20,16 @@ import {
 } from "./auth";
 import { priceHub } from "./env";
 import { passwordHasher } from "./hasher";
+import {
+  NICKNAME_RE,
+  NICKNAME_RULE,
+  changeNickname,
+  markBadgesSeen,
+  myProfile,
+  publicProfile,
+  updateProfile,
+} from "./profile";
+import { publicBadge } from "./badges";
 import { DIFFICULTIES, answerGame, gameStatus, startGame } from "./game";
 import { INITIAL_CASH } from "./rules";
 import { kst } from "./market";
@@ -58,7 +68,7 @@ app.post("/auth/signup", async (c) => {
   const pw = String(password ?? "");
   if (!EMAIL_RE.test(mail) || mail.length > 254) return c.json({ error: "이메일 형식이 올바르지 않습니다." }, 400);
   if (pw.length < 8 || pw.length > 128) return c.json({ error: "비밀번호는 8~128자로 입력해 주세요." }, 400);
-  if (nick.length < 2 || nick.length > 16) return c.json({ error: "닉네임은 2~16자로 입력해 주세요." }, 400);
+  if (!NICKNAME_RE.test(nick)) return c.json({ error: NICKNAME_RULE }, 400);
 
   const exists = await c.env.DB.prepare("SELECT email, nickname FROM users WHERE email = ? OR nickname = ?")
     .bind(mail, nick)
@@ -131,6 +141,7 @@ app.use("/salary", requireAuth);
 app.use("/game", requireAuth);
 app.use("/game/*", requireAuth);
 app.use("/hall-of-fame", requireAuth);
+app.use("/users/*", requireAuth);
 
 app.get("/me", async (c) => c.json(await buildMe(c.env, c.get("user").id)));
 
@@ -141,6 +152,27 @@ app.post("/me/main-symbol", async (c) => {
   await setMainSymbol(c.env, c.get("user").id, s);
   return c.json(await buildMe(c.env, c.get("user").id));
 });
+
+app.get("/me/profile", async (c) => c.json(await myProfile(c.env, c.get("user").id)));
+
+app.post("/me/profile", async (c) => {
+  const input = await body<{ privacy: unknown; featuredBadge: unknown; setupDone: unknown }>(c.req.raw);
+  await updateProfile(c.env, c.get("user").id, input);
+  return c.json(await myProfile(c.env, c.get("user").id));
+});
+
+app.post("/me/nickname", async (c) => {
+  const { nickname } = await body<{ nickname: string }>(c.req.raw);
+  await changeNickname(c.env, c.get("user").id, String(nickname ?? "").trim());
+  return c.json(await myProfile(c.env, c.get("user").id));
+});
+
+app.post("/me/badges/seen", async (c) => {
+  await markBadgesSeen(c.env, c.get("user").id);
+  return c.json({ ok: true });
+});
+
+app.get("/users/:nickname", async (c) => c.json(await publicProfile(c.env, c.req.param("nickname"))));
 
 app.get("/stocks/search", async (c) => {
   const q = (c.req.query("q") ?? "").trim();
@@ -215,11 +247,19 @@ app.post("/game/answer", async (c) => {
 });
 
 app.get("/hall-of-fame", async (c) => {
+  // 파산 횟수를 공개한 사람만 올라간다.
   const { results } = await c.env.DB.prepare(
-    `SELECT nickname, bankrupt_count AS bankruptCount FROM users
-      WHERE bankrupt_count > 0 ORDER BY bankrupt_count DESC, id LIMIT 10`,
-  ).all<{ nickname: string; bankruptCount: number }>();
-  return c.json({ ranking: results });
+    `SELECT nickname, bankrupt_count AS bankruptCount, featured_badge AS featured FROM users
+      WHERE bankrupt_count > 0 AND json_extract(privacy, '$.bankruptCount') = 1
+      ORDER BY bankrupt_count DESC, id LIMIT 10`,
+  ).all<{ nickname: string; bankruptCount: number; featured: string | null }>();
+  return c.json({
+    ranking: results.map((r) => ({
+      nickname: r.nickname,
+      bankruptCount: r.bankruptCount,
+      featuredBadge: r.featured ? publicBadge(r.featured) : null,
+    })),
+  });
 });
 
 app.all("*", (c) => c.json({ error: "Not Found" }, 404));

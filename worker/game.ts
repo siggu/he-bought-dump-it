@@ -9,6 +9,7 @@
 
 import type { Candle, GameDifficulty, GameQuestion, GameResult, GameStatus } from "../shared/protocol";
 import { evaluateAccount, loadUser, UserError } from "./account";
+import { onGameAnswered } from "./badges";
 import { type Env, priceHub } from "./env";
 import { kstDayStart, kstMonthStart } from "./market";
 import {
@@ -274,6 +275,7 @@ export async function answerGame(env: Env, userId: number, gameId: string, choic
     ).bind(userId, reward, now),
   ]);
   if (results[0].meta.changes !== 1) throw new UserError("이미 끝난 문제입니다.", 409);
+  await onGameAnswered(env, userId, game.difficulty, correct, now);
 
   // 보상으로 복구 기준을 넘었으면 여기서 파산 해제된다.
   const { user, quote } = await evaluateAccount(env, userId);

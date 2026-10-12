@@ -487,9 +487,12 @@ main.narrow .card + .card {
   padding-left: 20px;
 }
 .ranking li {
-  padding: 2px 0;
+  padding: 3px 0;
 }
-.ranking li span:last-child {
+.ranking li > * {
+  vertical-align: middle;
+}
+.ranking li > .muted {
   float: right;
 }
 
@@ -765,4 +768,534 @@ th {
   .game-buttons.n3 {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------- 애니메이션 로고 ---------- */
+
+.anim-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 800;
+  white-space: nowrap;
+  --logo-cycle: 4s;
+}
+.anim-logo-chart {
+  width: 40px;
+  height: 24px;
+  overflow: visible;
+}
+.anim-logo.lg .anim-logo-chart {
+  width: 84px;
+  height: 48px;
+}
+.anim-logo.lg {
+  font-size: 30px;
+  gap: 10px;
+}
+.anim-logo-chart path {
+  fill: none;
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 100;
+}
+.anim-logo-chart .rise {
+  stroke: var(--up);
+  animation: logo-rise var(--logo-cycle) ease-in-out infinite;
+}
+.anim-logo-chart .crash {
+  stroke: var(--down);
+  animation: logo-crash var(--logo-cycle) ease-in infinite;
+}
+.anim-logo-chart .pin {
+  transform-origin: 40px 7px;
+  transform-box: view-box;
+  animation: logo-pin var(--logo-cycle) ease-out infinite;
+}
+.anim-logo-chart .pin circle {
+  fill: var(--accent);
+  stroke: var(--bg);
+  stroke-width: 1.2;
+}
+.anim-logo-chart .pin text {
+  fill: var(--accent);
+  font-size: 7px;
+  font-weight: 900;
+  font-family: inherit;
+}
+.anim-logo-text .he {
+  margin-right: 0.25em;
+}
+.anim-logo-text .drop {
+  display: inline-block;
+  color: var(--up);
+  animation: logo-drop var(--logo-cycle) cubic-bezier(0.3, 0.7, 0.4, 1.4) infinite;
+}
+
+@keyframes logo-rise {
+  0% {
+    stroke-dashoffset: 100;
+    opacity: 1;
+  }
+  38%,
+  88% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+@keyframes logo-crash {
+  0%,
+  46% {
+    stroke-dashoffset: 100;
+    opacity: 1;
+  }
+  58%,
+  88% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+@keyframes logo-pin {
+  0%,
+  36% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  42% {
+    transform: scale(1.35);
+    opacity: 1;
+  }
+  46%,
+  88% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+@keyframes logo-drop {
+  0%,
+  50% {
+    transform: translateY(0) rotate(0);
+    color: var(--up);
+  }
+  58% {
+    transform: translateY(0.28em) rotate(-8deg);
+    color: var(--down);
+  }
+  66% {
+    transform: translateY(0.12em) rotate(4deg);
+    color: var(--down);
+  }
+  74%,
+  90% {
+    transform: translateY(0.2em) rotate(0);
+    color: var(--down);
+  }
+  100% {
+    transform: translateY(0) rotate(0);
+    color: var(--up);
+  }
+}
+
+/* 급락 직후 튀어나오는 삐에로 */
+.anim-logo-stage {
+  position: relative;
+  display: inline-flex;
+}
+.clown {
+  position: absolute;
+  /* 폭락한 차트 끝자락에서 튀어나온다 */
+  left: 58%;
+  top: 22%;
+  pointer-events: none;
+  transform-origin: 50% 90%;
+  animation: clown-pop var(--logo-cycle) cubic-bezier(0.3, 0.7, 0.4, 1.6) infinite;
+  z-index: 2;
+}
+.clown-svg,
+.clown-img {
+  display: block;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 0.35));
+}
+/* 헤더(작은 로고): 말풍선은 로고 아래쪽으로 내려온다 */
+.clown-bubble {
+  position: absolute;
+  left: 70%;
+  top: calc(100% + 6px);
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: #fff;
+  color: #191f28;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.3);
+}
+.clown-bubble::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: -5px;
+  border: 5px solid transparent;
+  border-top: 0;
+  border-bottom-color: #fff;
+}
+/* 큰 로고(로그인 화면): 삐에로가 더 크고 말풍선은 위쪽 */
+.anim-logo.lg .clown {
+  left: 60%;
+  top: 10%;
+}
+.anim-logo.lg .clown-svg,
+.anim-logo.lg .clown-img {
+  width: 56px;
+  height: 56px;
+}
+.anim-logo.lg .clown-bubble {
+  left: 75%;
+  top: auto;
+  bottom: calc(100% + 4px);
+  font-size: 15px;
+  padding: 5px 12px;
+}
+.anim-logo.lg .clown-bubble::before {
+  top: auto;
+  bottom: -5px;
+  border: 5px solid transparent;
+  border-bottom: 0;
+  border-top-color: #fff;
+}
+@keyframes clown-pop {
+  0%,
+  60% {
+    transform: scale(0) rotate(-20deg);
+    opacity: 0;
+  }
+  66% {
+    transform: scale(1.15) rotate(6deg);
+    opacity: 1;
+  }
+  70% {
+    transform: scale(1) rotate(-3deg);
+  }
+  76% {
+    transform: scale(1.05) rotate(3deg);
+  }
+  82%,
+  90% {
+    transform: scale(1) rotate(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.6) rotate(0);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-logo-chart path,
+  .anim-logo-chart .pin,
+  .anim-logo-text .drop,
+  .clown {
+    animation: none;
+  }
+  .clown {
+    display: none;
+  }
+  .anim-logo-chart path {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ---------- 배지 · 프로필 ---------- */
+
+.badge-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+.badge-chip.common {
+  color: #adb5bd;
+}
+.badge-chip.rare {
+  color: #4dabf7;
+}
+.badge-chip.epic {
+  color: #b197fc;
+}
+.badge-chip.legendary {
+  color: #ffd43b;
+  background: color-mix(in srgb, #ffd43b 12%, transparent);
+}
+.nickname-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  font-weight: 700;
+}
+.profile-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 20px;
+}
+.profile-head a.small {
+  font-size: 13px;
+  color: var(--muted);
+}
+.profile-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 16px 0 0;
+}
+.profile-stats div {
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.profile-stats dt {
+  font-size: 12px;
+  color: var(--muted);
+}
+.profile-stats dd {
+  margin: 0;
+  font-weight: 700;
+}
+.ok {
+  color: #20c997;
+  font-size: 14px;
+}
+.notice {
+  font-size: 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.inline-form {
+  display: flex;
+  gap: 8px;
+}
+button.wide {
+  width: 100%;
+  padding: 14px;
+  margin-top: 12px;
+}
+
+.badge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.badge-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 2px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 2px solid var(--border);
+  background: var(--surface-2);
+  text-align: left;
+  white-space: normal;
+  font-weight: 500;
+}
+.badge-card strong {
+  font-size: 16px;
+}
+.badge-card.common {
+  border-color: color-mix(in srgb, #adb5bd 45%, var(--border));
+}
+.badge-card.rare {
+  border-color: color-mix(in srgb, #4dabf7 55%, var(--border));
+}
+.badge-card.epic {
+  border-color: color-mix(in srgb, #b197fc 60%, var(--border));
+}
+.badge-card.legendary {
+  border-color: #ffd43b;
+  background: color-mix(in srgb, #ffd43b 8%, var(--surface-2));
+}
+.badge-card.selected {
+  box-shadow: 0 0 0 2px var(--text);
+}
+.badge-card.locked {
+  border-style: dashed;
+  color: var(--muted);
+}
+.badge-tier,
+.badge-date {
+  font-size: 11px;
+  color: var(--muted);
+}
+.badge-flavor {
+  font-size: 13px;
+  color: var(--muted);
+}
+.badge-cond {
+  font-size: 12px;
+  margin-top: 4px;
+}
+.badge-featured {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--bg);
+}
+
+.privacy-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+.privacy-list li + li {
+  border-top: 1px solid var(--border);
+}
+.privacy-list label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  cursor: pointer;
+}
+.privacy-list label > span:first-child {
+  display: flex;
+  flex-direction: column;
+}
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.switch span {
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--border);
+  position: relative;
+  transition: background 0.2s;
+}
+.switch span::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+.switch input:checked + span {
+  background: #20c997;
+}
+.switch input:checked + span::after {
+  transform: translateX(18px);
+}
+.switch input:focus-visible + span {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+.switch em {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--muted);
+  width: 3em;
+}
+
+.trade-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.trade-list li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 0;
+}
+.trade-list li .small {
+  margin-left: auto;
+}
+
+.badge-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 50;
+  max-width: 320px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 2px solid #ffd43b;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
+  animation: toast-in 0.4s cubic-bezier(0.3, 0.7, 0.4, 1.4);
+}
+.badge-toast p {
+  margin: 4px 0 10px;
+}
+@keyframes toast-in {
+  from {
+    transform: translateY(20px) scale(0.9);
+    opacity: 0;
+  }
+}
+@media (max-width: 900px) {
+  .badge-toast {
+    left: 16px;
+    right: 16px;
+    max-width: none;
+  }
+  .anim-logo.lg {
+    font-size: 24px;
+  }
+}
+.toast-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.header .nickname-line .nick {
+  color: var(--text);
+}
+.logo {
+  color: var(--text);
 }

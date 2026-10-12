@@ -4,6 +4,16 @@
 // 첫 문장이 조건을 만족해 1행을 바꿨을 때만 이어지는 문장이 실행되도록 `changes() = 1`로 엮는다.
 
 import type { MeResponse, Quote } from "../shared/protocol";
+import {
+  checkAccountBadges,
+  checkOrderBadges,
+  onBankrupt,
+  onMainChange,
+  onRecover,
+  onSalary,
+  publicBadge,
+  unseenBadges,
+} from "./badges";
 import { type Env, feedKind, marketOpen, priceHub } from "./env";
 import { kst } from "./market";
 import {
@@ -26,6 +36,11 @@ export interface UserRow {
   is_bankrupt: number;
   bankrupt_count: number;
   last_salary_month: string | null;
+  featured_badge: string | null;
+  profile_setup_done: number;
+  nickname_changed_at: number | null;
+  privacy: string;
+  created_at: number;
 }
 
 interface HoldingRow {
@@ -45,7 +60,8 @@ export class UserError extends Error {
 export async function loadUser(env: Env, userId: number): Promise<UserRow> {
   const user = await env.DB.prepare(
     `SELECT id, email, nickname, main_symbol, main_symbol_changed_at, cash,
-            is_bankrupt, bankrupt_count, last_salary_month
+            is_bankrupt, bankrupt_count, last_salary_month, featured_badge, profile_setup_done,
+            nickname_changed_at, privacy, created_at
        FROM users WHERE id = ?`,
   )
     .bind(userId)
@@ -54,7 +70,7 @@ export async function loadUser(env: Env, userId: number): Promise<UserRow> {
   return user;
 }
 
-async function loadHolding(env: Env, userId: number, symbol: string): Promise<HoldingRow | null> {
+export async function loadHolding(env: Env, userId: number, symbol: string): Promise<HoldingRow | null> {
   return env.DB.prepare("SELECT quantity, avg_price FROM holdings WHERE user_id = ? AND symbol = ?")
     .bind(userId, symbol)
     .first<HoldingRow>();
@@ -97,9 +113,10 @@ export async function evaluateAccount(env: Env, userId: number): Promise<Evaluat
       justBankrupted = await liquidate(env, user, holding, quote);
     }
   } else if (user.cash >= recoveryTarget(quote.price)) {
-    await env.DB.prepare("UPDATE users SET is_bankrupt = 0 WHERE id = ? AND is_bankrupt = 1 AND cash >= ?")
+    const res = await env.DB.prepare("UPDATE users SET is_bankrupt = 0 WHERE id = ? AND is_bankrupt = 1 AND cash >= ?")
       .bind(userId, recoveryTarget(quote.price))
       .run();
+    if (res.meta.changes === 1) await onRecover(env, userId, user.cash, Date.now());
   }
 
   if (justBankrupted || user.is_bankrupt) {
@@ -131,11 +148,22 @@ async function liquidate(env: Env, user: UserRow, holding: HoldingRow | null, qu
     );
   }
   const results = await env.DB.batch(stmts);
-  return results[0].meta.changes === 1;
+  const bankrupted = results[0].meta.changes === 1;
+  if (bankrupted) await onBankrupt(env, user.id, now);
+  return bankrupted;
 }
 
 export async function buildMe(env: Env, userId: number): Promise<MeResponse> {
   const { user, holding, quote, justBankrupted } = await evaluateAccount(env, userId);
+  await checkAccountBadges(env, userId, {
+    cash: user.cash,
+    isBankrupt: user.is_bankrupt === 1,
+    symbol: user.main_symbol,
+    quantity: holding?.quantity ?? 0,
+    avgPrice: holding?.avg_price ?? 0,
+    quote,
+    now: Date.now(),
+  });
   const main = user.main_symbol
     ? await env.DB.prepare("SELECT name FROM stocks WHERE symbol = ?").bind(user.main_symbol).first<{ name: string }>()
     : null;
@@ -159,7 +187,10 @@ export async function buildMe(env: Env, userId: number): Promise<MeResponse> {
       salaryAvailable: user.last_salary_month !== kst().month,
       salaryAmount: SALARY_AMOUNT,
       mainChangeAvailableAt: user.main_symbol && cooldownEnd > Date.now() ? cooldownEnd : null,
+      featuredBadge: user.featured_badge ? publicBadge(user.featured_badge) : null,
+      profileSetupDone: user.profile_setup_done === 1,
     },
+    newBadges: await unseenBadges(env, userId),
     holding: qty > 0 ? { quantity: qty, avgPrice: avg } : null,
     quote,
     totals: {
@@ -201,6 +232,7 @@ export async function setMainSymbol(env: Env, userId: number, symbol: string): P
     .bind(symbol, now, userId, user.main_symbol)
     .run();
   if (res.meta.changes !== 1) throw new UserError("다시 시도해 주세요.", 409);
+  if (user.main_symbol) await onMainChange(env, userId, now);
 }
 
 export async function placeOrder(
@@ -220,6 +252,7 @@ export async function placeOrder(
   if (user.is_bankrupt) throw new UserError("파산 상태에서는 매매할 수 없습니다. 미니게임이나 월급으로 재기하세요!", 403);
 
   const symbol = user.main_symbol;
+  const before = await loadHolding(env, userId, symbol);
   // 체결가는 서버가 가진 최신 시세로 정한다(클라이언트 가격은 받지 않는다).
   const quote = await mainQuote(env, symbol, 5_000);
   if (!quote) throw new UserError("시세를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.", 409);
@@ -241,11 +274,23 @@ export async function placeOrder(
            quantity  = holdings.quantity + excluded.quantity`,
       ).bind(userId, symbol, quantity, quote.price),
       env.DB.prepare(
-        `INSERT INTO orders (user_id, symbol, side, quantity, price, amount, fee, tax, created_at)
-         SELECT ?1, ?2, 'buy', ?3, ?4, ?5, ?6, 0, ?7 WHERE changes() = 1`,
-      ).bind(userId, symbol, quantity, quote.price, s.amount, s.fee, now),
+        `INSERT INTO orders (user_id, symbol, side, quantity, price, amount, fee, tax, created_at,
+                             day_high, day_low, day_rate)
+         SELECT ?1, ?2, 'buy', ?3, ?4, ?5, ?6, 0, ?7, ?8, ?9, ?10 WHERE changes() = 1`,
+      ).bind(userId, symbol, quantity, quote.price, s.amount, s.fee, now, quote.high, quote.low, quote.rate),
     ]);
     if (results[0].meta.changes !== 1) throw new UserError("잔액이 부족합니다.", 409);
+    await checkOrderBadges(env, userId, {
+      side,
+      quantity,
+      price: quote.price,
+      total: s.total,
+      cashBefore: user.cash,
+      avgPriceBefore: before?.avg_price ?? 0,
+      holdingAfter: (before?.quantity ?? 0) + quantity,
+      quote,
+      now,
+    });
     return { price: quote.price, quantity, total: s.total };
   }
 
@@ -258,12 +303,24 @@ export async function placeOrder(
     ).bind(quantity, userId, symbol),
     env.DB.prepare("UPDATE users SET cash = cash + ?1 WHERE id = ?2 AND changes() = 1").bind(s.total, userId),
     env.DB.prepare(
-      `INSERT INTO orders (user_id, symbol, side, quantity, price, amount, fee, tax, created_at)
-       SELECT ?1, ?2, 'sell', ?3, ?4, ?5, ?6, ?7, ?8 WHERE changes() = 1`,
-    ).bind(userId, symbol, quantity, quote.price, s.amount, s.fee, s.tax, now),
+      `INSERT INTO orders (user_id, symbol, side, quantity, price, amount, fee, tax, created_at,
+                           day_high, day_low, day_rate)
+       SELECT ?1, ?2, 'sell', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11 WHERE changes() = 1`,
+    ).bind(userId, symbol, quantity, quote.price, s.amount, s.fee, s.tax, now, quote.high, quote.low, quote.rate),
     env.DB.prepare("DELETE FROM holdings WHERE user_id = ? AND quantity = 0").bind(userId),
   ]);
   if (results[0].meta.changes !== 1) throw new UserError("보유 수량이 부족합니다.", 409);
+  await checkOrderBadges(env, userId, {
+    side,
+    quantity,
+    price: quote.price,
+    total: s.total,
+    cashBefore: user.cash,
+    avgPriceBefore: before?.avg_price ?? 0,
+    holdingAfter: (before?.quantity ?? 0) - quantity,
+    quote,
+    now,
+  });
   return { price: quote.price, quantity, total: s.total };
 }
 
@@ -280,4 +337,5 @@ export async function claimSalary(env: Env, userId: number): Promise<void> {
     ).bind(userId, SALARY_AMOUNT, Date.now()),
   ]);
   if (results[0].meta.changes !== 1) throw new UserError("이번 달 월급은 이미 받았습니다.", 409);
+  await onSalary(env, userId, Date.now());
 }

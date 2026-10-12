@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import type { MeResponse } from "../../../shared/protocol";
+import type { MeResponse, PublicBadge } from "../../../shared/protocol";
+import { Nickname } from "../components/Badge";
 import { api } from "../api";
 import { useAuth, useMe } from "../auth";
 import { ChartPanel } from "../components/ChartPanel";
@@ -157,7 +158,9 @@ function SalaryCard() {
 }
 
 function HallOfFame() {
-  const [ranking, setRanking] = useState<{ nickname: string; bankruptCount: number }[] | null>(null);
+  const [ranking, setRanking] = useState<
+    { nickname: string; bankruptCount: number; featuredBadge: PublicBadge | null }[] | null
+  >(null);
   useEffect(() => {
     api
       .hallOfFame()
@@ -171,7 +174,7 @@ function HallOfFame() {
       <ol className="ranking">
         {ranking.map((r) => (
           <li key={r.nickname}>
-            <span>{r.nickname}</span>
+            <Nickname nickname={r.nickname} badge={r.featuredBadge} />
             <span className="muted">{r.bankruptCount}회</span>
           </li>
         ))}

@@ -1,11 +1,17 @@
+import { useEffect, useState } from "react";
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import type { OwnedBadge } from "../../shared/protocol";
+import { api } from "./api";
 import { AuthProvider, useAuth } from "./auth";
+import { BadgeChip, TIER_LABEL } from "./components/Badge";
+import { Logo } from "./components/Logo";
 import { StockSearch } from "./components/StockSearch";
 import { AuthPage } from "./pages/AuthPage";
 import { Dashboard } from "./pages/Dashboard";
 import { Game } from "./pages/Game";
 import { History } from "./pages/History";
 import { Onboarding } from "./pages/Onboarding";
+import { MyProfilePage, ProfileSetup, UserProfilePage } from "./pages/Profile";
 import { StockDetail } from "./pages/StockDetail";
 import { useRealtime } from "./realtime";
 
@@ -34,6 +40,16 @@ function Shell() {
     );
   }
 
+  // 가입 직후: 공개 범위 설정 → 메인 종목 선택 순서
+  if (!me.user.profileSetupDone) {
+    return (
+      <>
+        <Header />
+        <ProfileSetup />
+      </>
+    );
+  }
+
   if (!me.user.mainSymbol) {
     return (
       <>
@@ -53,9 +69,49 @@ function Shell() {
         <Route path="/history" element={<History />} />
         <Route path="/game" element={<Game />} />
         <Route path="/settings/main" element={<Onboarding />} />
+        <Route path="/profile" element={<MyProfilePage />} />
+        <Route path="/u/:nickname" element={<UserProfilePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <BadgeToast />
     </>
+  );
+}
+
+/** 새로 얻은 배지 알림 */
+function BadgeToast() {
+  const { me } = useAuth();
+  const [queue, setQueue] = useState<OwnedBadge[]>([]);
+
+  useEffect(() => {
+    const fresh = me?.newBadges ?? [];
+    if (fresh.length === 0) return;
+    setQueue((q) => [...q, ...fresh.filter((b) => !q.some((x) => x.id === b.id))]);
+    api.badgesSeen().catch(() => undefined);
+  }, [me?.newBadges]);
+
+  const badge = queue[0];
+  if (!badge) return null;
+  return (
+    <div className="badge-toast" role="status">
+      <small className="muted">🏅 새 배지 획득 · {TIER_LABEL[badge.tier]}</small>
+      <div>
+        <BadgeChip badge={badge} />
+      </div>
+      <p>
+        {badge.flavor}
+        <br />
+        <small className="muted">조건: {badge.condition}</small>
+      </p>
+      <div className="toast-actions">
+        <Link to="/profile" className="button" onClick={() => setQueue((q) => q.slice(1))}>
+          배지함 보기
+        </Link>
+        <button type="button" className="primary" onClick={() => setQueue((q) => q.slice(1))}>
+          확인
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -65,7 +121,7 @@ function Header() {
   return (
     <header className="header">
       <Link to="/" className="logo">
-        📉 그가 <em>샀습니다</em>
+        <Logo />
       </Link>
       {me?.user.mainSymbol && (
         <StockSearch placeholder="다른 종목 검색 (조회 전용)" onSelect={(s) => navigate(`/stocks/${s.symbol}`)} />
@@ -80,7 +136,12 @@ function Header() {
             {me.user.isBankrupt && <NavLink to="/game">미니게임</NavLink>}
           </>
         )}
-        <span className="nickname">{me?.user.nickname}</span>
+        {me && (
+          <Link to="/profile" className="nickname-line" title="내 프로필">
+            {me.user.featuredBadge && <BadgeChip badge={me.user.featuredBadge} />}
+            <span className="nick">{me.user.nickname}</span>
+          </Link>
+        )}
         <button
           type="button"
           className="link"

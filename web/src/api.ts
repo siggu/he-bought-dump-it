@@ -5,7 +5,11 @@ import type {
   GameResult,
   GameStatus,
   MeResponse,
+  MyProfile,
   OrderRow,
+  Privacy,
+  PublicBadge,
+  PublicProfile,
   StockInfo,
 } from "../../shared/protocol";
 
@@ -50,5 +54,15 @@ export const api = {
   game: () => request<GameStatus>("GET", "/game"),
   gameStart: (difficulty: GameDifficulty) => request<GameQuestion>("POST", "/game/start", { difficulty }),
   gameAnswer: (gameId: string, choice: string) => request<GameResult>("POST", "/game/answer", { gameId, choice }),
-  hallOfFame: () => request<{ ranking: { nickname: string; bankruptCount: number }[] }>("GET", "/hall-of-fame"),
+  hallOfFame: () =>
+    request<{ ranking: { nickname: string; bankruptCount: number; featuredBadge: PublicBadge | null }[] }>(
+      "GET",
+      "/hall-of-fame",
+    ),
+  myProfile: () => request<MyProfile>("GET", "/me/profile"),
+  updateProfile: (input: { privacy?: Partial<Privacy>; featuredBadge?: string | null; setupDone?: boolean }) =>
+    request<MyProfile>("POST", "/me/profile", input),
+  changeNickname: (nickname: string) => request<MyProfile>("POST", "/me/nickname", { nickname }),
+  badgesSeen: () => request<{ ok: true }>("POST", "/me/badges/seen"),
+  user: (nickname: string) => request<PublicProfile>("GET", `/users/${encodeURIComponent(nickname)}`),
 };

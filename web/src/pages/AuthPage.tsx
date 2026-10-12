@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { Logo } from "../components/Logo";
 
 export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   const { refresh } = useAuth();
@@ -28,7 +29,9 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   return (
     <main className="auth">
       <div className="auth-hero">
-        <p className="logo">📉 그가 <em>샀습니다</em></p>
+        <p className="logo">
+          <Logo size="lg" />
+        </p>
         <p className="muted">
           한 종목에 올인하는 실시간 모의 투자.
           <br />
@@ -43,8 +46,16 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
         </label>
         {mode === "signup" && (
           <label>
-            닉네임 <small className="muted">(2~16자)</small>
-            <input required minLength={2} maxLength={16} value={nickname} onChange={(e) => setNickname(e.target.value)} />
+            닉네임 <small className="muted">(2~16자, 한글·영문·숫자·_ / 변경은 3일에 한 번)</small>
+            <input
+              required
+              minLength={2}
+              maxLength={16}
+              pattern="[가-힣a-zA-Z0-9_]{2,16}"
+              title="2~16자의 한글·영문·숫자·밑줄(_)"
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+            />
           </label>
         )}
         <label>

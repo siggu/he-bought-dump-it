@@ -62,7 +62,12 @@ export interface MeResponse {
     salaryAmount: number;
     /** 메인 종목 변경 가능 시각 (epoch ms). null이면 지금 가능 */
     mainChangeAvailableAt: number | null;
+    featuredBadge: PublicBadge | null;
+    /** 가입 직후 공개 범위 설정을 마쳤는지 */
+    profileSetupDone: boolean;
   };
+  /** 아직 확인하지 않은 새 배지 */
+  newBadges: OwnedBadge[];
   holding: { quantity: number; avgPrice: number } | null;
   quote: Quote | null;
   totals: {
@@ -145,4 +150,51 @@ export interface GameResult {
   cash: number;
   recovered: boolean;
   recoveryTarget: number;
+}
+
+// ---- 배지 · 프로필 ----
+
+export type BadgeTier = "common" | "rare" | "epic" | "legendary";
+
+/** 다른 사람에게 보이는 배지 정보 (획득 조건은 포함하지 않는다) */
+export interface PublicBadge {
+  id: string;
+  name: string;
+  tier: BadgeTier;
+  /** 조건을 드러내지 않는 한 줄 설명 */
+  flavor: string;
+}
+
+/** 본인에게만 보이는 배지 정보 */
+export interface OwnedBadge extends PublicBadge {
+  condition: string;
+  earnedAt: number;
+}
+
+export const PRIVACY_KEYS = ["badges", "mainSymbol", "bankruptCount", "totalAssets", "profitRate", "recentTrades"] as const;
+export type PrivacyKey = (typeof PRIVACY_KEYS)[number];
+/** true면 공개. 기본은 전부 비공개 */
+export type Privacy = Record<PrivacyKey, boolean>;
+
+export interface MyProfile {
+  nickname: string;
+  privacy: Privacy;
+  featuredBadgeId: string | null;
+  badges: OwnedBadge[];
+  totalBadges: number;
+  /** 닉네임 변경 가능 시각 (epoch ms). null이면 지금 가능 */
+  nicknameChangeAvailableAt: number | null;
+}
+
+export interface PublicProfile {
+  nickname: string;
+  featuredBadge: PublicBadge | null;
+  joinedAt: number;
+  /** 비공개 항목은 null */
+  badges: PublicBadge[] | null;
+  mainStock: { symbol: string; name: string } | null;
+  bankruptCount: number | null;
+  totalAssets: number | null;
+  profitRate: number | null;
+  recentTrades: { name: string; side: "buy" | "sell" | "liquidation"; createdAt: number }[] | null;
 }

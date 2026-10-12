@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Candle } from "../shared/protocol";
+import { BADGES, monthStreak, tradingStreak } from "../worker/badges";
 import { parseKisMessage, subscriptionMessage } from "../worker/hub/kis";
 import { basePrice, mockDailyCandles } from "../worker/hub/mock";
 import { changePct, normalize, pickIndex } from "../worker/game";
@@ -206,5 +207,34 @@ describe("모의 시세", () => {
     expect(a[a.length - 1].date).toBe("2026-10-12");
     expect(a[a.length - 1].close).toBe(basePrice("005930"));
     expect(a.every((c) => c.low <= Math.min(c.open, c.close) && c.high >= Math.max(c.open, c.close))).toBe(true);
+  });
+});
+
+describe("배지 연속 판정", () => {
+  const holidays = parseHolidays("2026-10-09");
+  // 2026-10-13(화) 12:00 KST
+  const TUE = Date.UTC(2026, 9, 13, 3, 0);
+
+  it("주말·휴장일은 건너뛰고 연속 거래일을 센다", () => {
+    // 10/8(목), [10/9 한글날], [10/10~11 주말], 10/12(월), 10/13(화)
+    const dates = new Set(["2026-10-08", "2026-10-12", "2026-10-13"]);
+    expect(tradingStreak(dates, TUE, holidays)).toBe(3);
+  });
+
+  it("빠진 거래일이 있으면 끊긴다", () => {
+    expect(tradingStreak(new Set(["2026-10-13", "2026-10-08"]), TUE, holidays)).toBe(1);
+    expect(tradingStreak(new Set(["2026-10-12"]), TUE, holidays)).toBe(0);
+  });
+
+  it("월급 연속 개월 수 (연도 경계 포함)", () => {
+    const jan = Date.UTC(2027, 0, 5, 3, 0);
+    expect(monthStreak(new Set(["2026-10", "2026-11", "2026-12", "2027-01"]), jan)).toBe(4);
+    expect(monthStreak(new Set(["2026-11", "2027-01"]), jan)).toBe(1);
+  });
+
+  it("배지 조건은 모두 고유하고 이름이 있다", () => {
+    expect(new Set(BADGES.map((b) => b.id)).size).toBe(BADGES.length);
+    expect(new Set(BADGES.map((b) => b.name)).size).toBe(BADGES.length);
+    expect(BADGES.every((b) => b.name && b.flavor && b.condition)).toBe(true);
   });
 });
