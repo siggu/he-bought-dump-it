@@ -37,6 +37,7 @@ export class PriceHub extends DurableObject<Env> {
   private readonly mock = new MockMarket();
 
   private quotes = new Map<string, Quote>();
+  private quoteRequests = new Map<string, Promise<Quote>>();
   private ticks = new Map<string, TickPoint[]>();
   private active = new Set<string>();
 
@@ -72,25 +73,46 @@ export class PriceHub extends DurableObject<Env> {
    * 최신 시세. 실시간 구독 중인 종목은 메모리 값을 그대로 쓰고,
    * 아니면 maxAgeMs 이내 캐시가 없을 때 KIS REST로 조회한다.
    */
-  async getQuote(symbol: string, maxAgeMs = 60_000): Promise<Quote> {
+  /**
+   * allowStale(기본): 캐시가 오래됐어도 일단 바로 돌려주고 뒤에서 새로 받아 둔다(화면 표시용).
+   * 주문처럼 정확한 가격이 필요하면 allowStale=false로 maxAgeMs 이내 시세를 기다려 받는다.
+   */
+  async getQuote(symbol: string, maxAgeMs = 60_000, allowStale = true): Promise<Quote> {
     if (this.feed === "mock") return this.quotes.get(symbol) ?? this.mock.quote(symbol);
     const cached = this.quotes.get(symbol);
     if (cached && (this.isLive(symbol) || Date.now() - cached.at < maxAgeMs)) return cached;
-    const fresh = await this.kis!.quote(symbol);
-    this.quotes.set(symbol, fresh);
-    return fresh;
+    if (cached && allowStale) {
+      this.refreshQuote(symbol).catch((err) => console.error("quote refresh failed", symbol, err));
+      return cached;
+    }
+    return this.refreshQuote(symbol);
+  }
+
+  /** 같은 종목을 동시에 여러 번 조회하지 않도록 진행 중인 요청을 공유한다. */
+  private refreshQuote(symbol: string): Promise<Quote> {
+    let pending = this.quoteRequests.get(symbol);
+    if (!pending) {
+      pending = this.kis!.quote(symbol)
+        .then((q) => {
+          this.quotes.set(symbol, q);
+          return q;
+        })
+        .finally(() => this.quoteRequests.delete(symbol));
+      this.quoteRequests.set(symbol, pending);
+    }
+    return pending;
   }
 
   /** 여러 종목 시세. 못 불러온 종목은 결과에서 빠진다. */
-  async getQuotes(symbols: string[], maxAgeMs = 60_000): Promise<Record<string, Quote>> {
+  /** 여러 종목 시세를 동시에 조회한다. 못 불러온 종목은 결과에서 빠진다. */
+  async getQuotes(symbols: string[], maxAgeMs = 60_000, allowStale = true): Promise<Record<string, Quote>> {
+    const unique = [...new Set(symbols)];
+    const settled = await Promise.allSettled(unique.map((s) => this.getQuote(s, maxAgeMs, allowStale)));
     const out: Record<string, Quote> = {};
-    for (const s of [...new Set(symbols)]) {
-      try {
-        out[s] = await this.getQuote(s, maxAgeMs);
-      } catch (err) {
-        console.error("quote failed", s, err);
-      }
-    }
+    settled.forEach((r, i) => {
+      if (r.status === "fulfilled") out[unique[i]] = r.value;
+      else console.error("quote failed", unique[i], r.reason);
+    });
     return out;
   }
 
@@ -149,13 +171,23 @@ export class PriceHub extends DurableObject<Env> {
         }
         att.symbols.push(symbol);
         ws.serializeAttachment(att);
-        await this.reconcile();
       }
+      // 첫 시세를 먼저 보내고, KIS 실시간 등록은 그 뒤에 진행한다(실시간 연결을 기다리느라 화면이 비지 않게).
       await this.sendSnapshot(ws, symbol);
+      if (!this.isLive(symbol)) {
+        this.reconcile()
+          .then(() => {
+            // 실시간 등록이 끝났으면 LIVE 상태로 다시 알려 준다.
+            if (this.isLive(symbol) && (ws.deserializeAttachment() as ClientAttachment | null)?.symbols.includes(symbol)) {
+              return this.sendSnapshot(ws, symbol);
+            }
+          })
+          .catch((err) => console.error("reconcile failed", err));
+      }
     } else if (msg.op === "unsub") {
       att.symbols = att.symbols.filter((s) => s !== symbol);
       ws.serializeAttachment(att);
-      await this.reconcile();
+      this.reconcile().catch((err) => console.error("reconcile failed", err));
     }
   }
 

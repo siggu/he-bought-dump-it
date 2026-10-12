@@ -3,6 +3,7 @@ import type { GameDifficulty, OrderRow, StockInfo } from "../shared/protocol";
 import { searchStocks } from "../shared/search";
 import {
   buildMe,
+  quotesFor,
   claimSalary,
   placeOrder,
   UserError,
@@ -221,7 +222,9 @@ app.get("/stocks/:symbol", async (c) => {
     .bind(symbol)
     .first<StockInfo>();
   if (!stock) return c.json({ error: "존재하지 않는 종목입니다." }, 404);
-  return c.json({ stock });
+  // 실시간 연결이 붙기 전에도 바로 그릴 수 있도록 캐시된 시세를 함께 준다.
+  const quote = (await quotesFor(c.env, [symbol])).get(symbol) ?? null;
+  return c.json({ stock, quote });
 });
 
 app.get("/stocks/:symbol/daily", async (c) => {

@@ -86,11 +86,19 @@ export async function loadHolding(env: Env, userId: number, symbol: string): Pro
     .first<HoldingRow>();
 }
 
-/** 여러 종목 시세 (서버 캐시 공유, 기본 60초) */
-export async function quotesFor(env: Env, symbols: string[], maxAgeMs?: number): Promise<Map<string, Quote>> {
+/**
+ * 여러 종목 시세 (서버 캐시 공유, 기본 60초).
+ * fresh=true면 오래된 캐시를 쓰지 않고 maxAgeMs 이내 시세를 기다려 받는다(주문 체결용).
+ */
+export async function quotesFor(
+  env: Env,
+  symbols: string[],
+  maxAgeMs?: number,
+  fresh = false,
+): Promise<Map<string, Quote>> {
   if (symbols.length === 0) return new Map();
   try {
-    return new Map(Object.entries(await priceHub(env).getQuotes(symbols, maxAgeMs)));
+    return new Map(Object.entries(await priceHub(env).getQuotes(symbols, maxAgeMs, !fresh)));
   } catch (err) {
     console.error("quotes failed", err);
     return new Map();
@@ -265,7 +273,7 @@ export async function placeOrder(
   }
 
   // 체결가는 서버가 가진 최신 시세로 정한다(클라이언트 가격은 받지 않는다).
-  const quote = (await quotesFor(env, [symbol], 5_000)).get(symbol);
+  const quote = (await quotesFor(env, [symbol], 5_000, true)).get(symbol);
   if (!quote) throw new UserError("시세를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.", 409);
   const now = Date.now();
 

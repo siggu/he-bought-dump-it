@@ -130,9 +130,16 @@ export interface KeyValueStore {
 
 export class KisError extends Error {}
 
+/** KIS 응답을 기다리는 최대 시간 */
+const REST_TIMEOUT_MS = 5_000;
+const WS_CONNECT_TIMEOUT_MS = 5_000;
+
 export class KisClient {
-  private queue: Promise<unknown> = Promise.resolve();
-  private lastCallAt = 0;
+  /** 다음 호출을 보낼 수 있는 가장 이른 시각 (호출 간격 제한용) */
+  private nextSlotAt = 0;
+  /** 토큰·접속키: 메모리 캐시와 발급 중인 요청 (동시에 여러 번 발급하지 않도록) */
+  private memo = new Map<string, CachedValue>();
+  private issuing = new Map<string, Promise<string>>();
 
   constructor(
     private readonly appKey: string,
@@ -146,29 +153,43 @@ export class KisClient {
     return this.env === "real" ? 70 : 600;
   }
 
-  private throttle<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.queue.then(async () => {
-      const wait = this.lastCallAt + this.minIntervalMs - Date.now();
-      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-      this.lastCallAt = Date.now();
-      return fn();
-    });
-    this.queue = run.catch(() => undefined);
-    return run;
+  /**
+   * 호출 "시작" 간격만 지킨다. 앞 호출의 응답을 기다리지 않으므로 여러 종목을 동시에 조회할 수 있다.
+   */
+  private async throttle<T>(fn: () => Promise<T>): Promise<T> {
+    const now = Date.now();
+    const slot = Math.max(now, this.nextSlotAt);
+    this.nextSlotAt = slot + this.minIntervalMs;
+    if (slot > now) await new Promise((r) => setTimeout(r, slot - now));
+    return fn();
   }
 
   private async cached(key: string, issue: () => Promise<CachedValue>): Promise<string> {
-    const hit = await this.store.get<CachedValue>(key);
-    if (hit && hit.expiresAt > Date.now() + 60_000) return hit.value;
-    const fresh = await issue();
-    await this.store.put(key, fresh);
-    return fresh.value;
+    const valid = (v: CachedValue | undefined) => v && v.expiresAt > Date.now() + 60_000;
+    const mem = this.memo.get(key);
+    if (valid(mem)) return mem!.value;
+    const pending = this.issuing.get(key);
+    if (pending) return pending;
+    const task = (async () => {
+      const stored = await this.store.get<CachedValue>(key);
+      if (valid(stored)) {
+        this.memo.set(key, stored!);
+        return stored!.value;
+      }
+      const fresh = await issue();
+      this.memo.set(key, fresh);
+      await this.store.put(key, fresh);
+      return fresh.value;
+    })().finally(() => this.issuing.delete(key));
+    this.issuing.set(key, task);
+    return task;
   }
 
   /** 접근 토큰. 유효기간 1일, 재발급 시 알림톡이 가므로 반드시 캐시해서 쓴다. */
   private accessToken(): Promise<string> {
     return this.cached(`kis:token:${this.env}`, async () => {
       const res = await fetch(`${REST_BASE[this.env]}/oauth2/tokenP`, {
+        signal: AbortSignal.timeout(REST_TIMEOUT_MS),
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -196,6 +217,7 @@ export class KisClient {
   approvalKey(): Promise<string> {
     return this.cached(`kis:approval:${this.env}`, async () => {
       const res = await fetch(`${REST_BASE[this.env]}/oauth2/Approval`, {
+        signal: AbortSignal.timeout(REST_TIMEOUT_MS),
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -218,6 +240,7 @@ export class KisClient {
     return this.throttle(async () => {
       const url = `${REST_BASE[this.env]}${path}?${new URLSearchParams(params)}`;
       const res = await fetch(url, {
+        signal: AbortSignal.timeout(REST_TIMEOUT_MS),
         headers: {
           "content-type": "application/json; charset=utf-8",
           authorization: `Bearer ${token}`,
@@ -286,7 +309,10 @@ export class KisClient {
 
   /** 실시간 시세 웹소켓 연결 */
   async connectRealtime(): Promise<WebSocket> {
-    const res = await fetch(WS_URL[this.env], { headers: { Upgrade: "websocket" } });
+    const res = await fetch(WS_URL[this.env], {
+      headers: { Upgrade: "websocket" },
+      signal: AbortSignal.timeout(WS_CONNECT_TIMEOUT_MS),
+    });
     const ws = res.webSocket;
     if (!ws) throw new KisError(`실시간 시세 서버 연결 실패 (${res.status})`);
     ws.accept();
