@@ -170,6 +170,15 @@ npm run typecheck && npm test && npm run build
 
 5. `main`에 push하거나 *Actions → Deploy to Cloudflare → Run workflow*를 실행합니다. 배포 주소는 `https://he-bought-dump-it.<서브도메인>.workers.dev`입니다.
 
+### Cloudflare Workers Builds(대시보드의 Git 연동)를 켠 경우
+GitHub Actions(`deploy.yml`)가 이미 마이그레이션과 배포를 처리하므로 **Workers Builds는 꺼 두는 것을 권장합니다.**
+- 끄는 곳: Cloudflare 대시보드 → Workers & Pages → he-bought-dump-it → Settings → Build → Disconnect
+- 켜 둔다면 배포가 두 번 일어납니다. 또 Workers Builds는 D1 마이그레이션을 적용하지 않아서, 새 마이그레이션이 들어간 변경은 잠깐 오류가 날 수 있습니다.
+  - 그래서 Workers Builds의 Deploy command는 `npm run deploy`(마이그레이션 적용 → 배포)로 바꿔 주세요.
+- 저장소 설정은 어느 쪽으로 배포해도 동작하게 해 두었습니다.
+  - `wrangler.jsonc`에 실제 D1 ID가 들어 있습니다.
+  - `build.command`로 배포 전에 프론트엔드를 자동으로 빌드합니다.
+
 ### 한국투자증권 Open API 키
 [KIS Developers](https://apiportal.koreainvestment.com)에서 계좌를 연결하고 앱키와 앱시크릿을 발급받습니다. 연동 방식은 공식 샘플 [koreainvestment/open-trading-api](https://github.com/koreainvestment/open-trading-api)를 따릅니다.
 
