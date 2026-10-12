@@ -9,10 +9,12 @@ const SELL_TAX_RATE = 0.002;
 
 export function OrderPanel({
   me,
+  symbol,
   price,
   onDone,
 }: {
   me: MeResponse;
+  symbol: string;
   price: number | null;
   onDone: (me: MeResponse, message: string) => void;
 }) {
@@ -22,7 +24,7 @@ export function OrderPanel({
   const [error, setError] = useState<string | null>(null);
 
   const quantity = Number.parseInt(qty, 10) || 0;
-  const held = me.holding?.quantity ?? 0;
+  const held = me.holdings.find((h) => h.symbol === symbol)?.quantity ?? 0;
   const maxBuy = price ? Math.floor(me.user.cash / (price * (1 + FEE_RATE))) : 0;
   const max = side === "buy" ? maxBuy : held;
   const amount = (price ?? 0) * quantity;
@@ -30,19 +32,15 @@ export function OrderPanel({
   const tax = side === "sell" ? Math.floor(amount * SELL_TAX_RATE) : 0;
   const total = side === "buy" ? amount + fee : amount - fee - tax;
 
-  const disabled =
-    busy || !price || quantity < 1 || quantity > max || me.user.isBankrupt || !me.market.open;
+  const disabled = busy || !price || quantity < 1 || quantity > max || me.user.isBankrupt || !me.market.open;
 
   const submit = async () => {
     setBusy(true);
     setError(null);
     try {
-      const r = await api.order(side, quantity);
+      const r = await api.order(symbol, side, quantity);
       setQty("");
-      onDone(
-        r.me,
-        `${side === "buy" ? "매수" : "매도"} 체결: ${num(r.result.quantity)}주 × ${won(r.result.price)}`,
-      );
+      onDone(r.me, `${side === "buy" ? "매수" : "매도"} 체결: ${num(r.result.quantity)}주 × ${won(r.result.price)}`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -79,9 +77,7 @@ export function OrderPanel({
             </button>
           ))}
         </div>
-        <p className="muted small">
-          {side === "buy" ? `최대 ${num(maxBuy)}주 매수 가능` : `보유 ${num(held)}주`}
-        </p>
+        <p className="muted small">{side === "buy" ? `최대 ${num(maxBuy)}주 매수 가능` : `보유 ${num(held)}주`}</p>
       </div>
       <dl className="order-summary">
         <div>
@@ -104,6 +100,7 @@ export function OrderPanel({
         </div>
       </dl>
       {error && <p className="error">{error}</p>}
+      {me.user.isBankrupt && <p className="muted small">파산 상태에서는 매매할 수 없어요.</p>}
       {!me.market.open && <p className="muted small">장 운영 시간(평일 09:00~15:30)에만 주문할 수 있습니다.</p>}
       <button type="button" className={`primary ${side}`} disabled={disabled} onClick={submit}>
         {busy ? "주문 중…" : side === "buy" ? "시장가 매수" : "시장가 매도"}

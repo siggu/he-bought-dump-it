@@ -1,9 +1,16 @@
 // 프로필, 공개 범위, 닉네임 변경
 
-import { PRIVACY_KEYS, type MyProfile, type Privacy, type PublicProfile } from "../shared/protocol";
-import { loadHolding, loadUser, UserError } from "./account";
+import {
+  INTERACTION_KEYS,
+  PRIVACY_KEYS,
+  type InteractionSettings,
+  type MyProfile,
+  type Privacy,
+  type PublicProfile,
+} from "../shared/protocol";
+import { holdingsValue, loadHoldings, loadUser, quotesFor, stockNames, UserError } from "./account";
 import { BADGES, ownedBadges, publicBadge } from "./badges";
-import { type Env, priceHub } from "./env";
+import type { Env } from "./env";
 
 /** 닉네임 변경 주기: 마지막 변경 시각부터 72시간(3일). 가입 시 정한 닉네임은 변경으로 치지 않는다. */
 export const NICKNAME_CHANGE_COOLDOWN_MS = 72 * 60 * 60 * 1000;
@@ -20,6 +27,17 @@ export function parsePrivacy(raw: string | null | undefined): Privacy {
   return Object.fromEntries(PRIVACY_KEYS.map((k) => [k, obj[k] === true])) as Privacy;
 }
 
+/** 상호작용 허용 설정. 키가 없거나 false면 거부 (기본: 전부 거부) */
+export function parseInteractionSettings(raw: string | null | undefined): InteractionSettings {
+  let obj: Record<string, unknown> = {};
+  try {
+    obj = JSON.parse(raw ?? "{}") as Record<string, unknown>;
+  } catch {
+    // 기본값
+  }
+  return Object.fromEntries(INTERACTION_KEYS.map((k) => [k, obj[k] === true])) as InteractionSettings;
+}
+
 function nicknameChangeAvailableAt(changedAt: number | null, now = Date.now()): number | null {
   if (!changedAt) return null;
   const at = changedAt + NICKNAME_CHANGE_COOLDOWN_MS;
@@ -31,6 +49,7 @@ export async function myProfile(env: Env, userId: number): Promise<MyProfile> {
   return {
     nickname: user.nickname,
     privacy: parsePrivacy(user.privacy),
+    interactionSettings: parseInteractionSettings(user.interaction_settings),
     featuredBadgeId: user.featured_badge,
     badges: await ownedBadges(env, userId),
     totalBadges: BADGES.length,
@@ -41,12 +60,17 @@ export async function myProfile(env: Env, userId: number): Promise<MyProfile> {
 export async function updateProfile(
   env: Env,
   userId: number,
-  input: { privacy?: unknown; featuredBadge?: unknown; setupDone?: unknown },
+  input: { privacy?: unknown; interactionSettings?: unknown; featuredBadge?: unknown; setupDone?: unknown },
 ): Promise<void> {
   const user = await loadUser(env, userId);
   let privacy = parsePrivacy(user.privacy);
   if (input.privacy && typeof input.privacy === "object") {
     privacy = parsePrivacy(JSON.stringify({ ...privacy, ...(input.privacy as object) }));
+  }
+
+  let interactions = parseInteractionSettings(user.interaction_settings);
+  if (input.interactionSettings && typeof input.interactionSettings === "object") {
+    interactions = parseInteractionSettings(JSON.stringify({ ...interactions, ...(input.interactionSettings as object) }));
   }
 
   let featured = user.featured_badge;
@@ -62,11 +86,11 @@ export async function updateProfile(
   }
 
   await env.DB.prepare(
-    `UPDATE users SET privacy = ?, featured_badge = ?,
+    `UPDATE users SET privacy = ?, interaction_settings = ?, featured_badge = ?,
             profile_setup_done = CASE WHEN ? THEN 1 ELSE profile_setup_done END
       WHERE id = ?`,
   )
-    .bind(JSON.stringify(privacy), featured, input.setupDone === true ? 1 : 0, userId)
+    .bind(JSON.stringify(privacy), JSON.stringify(interactions), featured, input.setupDone === true ? 1 : 0, userId)
     .run();
 }
 
@@ -103,26 +127,22 @@ export async function publicProfile(env: Env, nickname: string): Promise<PublicP
   const user = await loadUser(env, row.id);
   const p = parsePrivacy(user.privacy);
 
-  const symbol = user.main_symbol;
-  const stock = symbol
-    ? await env.DB.prepare("SELECT symbol, name FROM stocks WHERE symbol = ?").bind(symbol).first<{ symbol: string; name: string }>()
-    : null;
-
+  let holdingsPublic: PublicProfile["holdings"] = null;
   let totalAssets: number | null = null;
   let profitRate: number | null = null;
-  if ((p.totalAssets || p.profitRate) && symbol) {
-    const holding = await loadHolding(env, user.id, symbol);
-    const quote = await priceHub(env)
-      .getQuote(symbol)
-      .catch(() => null);
-    const price = quote?.price ?? holding?.avg_price ?? 0;
-    const qty = holding?.quantity ?? 0;
-    if (p.totalAssets) totalAssets = user.cash + qty * price;
-    if (p.profitRate) {
-      profitRate = qty > 0 && holding ? Math.round(((price - holding.avg_price) / holding.avg_price) * 10_000) / 100 : 0;
+  if (p.holdings || p.totalAssets || p.profitRate) {
+    const holdings = await loadHoldings(env, user.id);
+    if (p.holdings) {
+      const names = await stockNames(env, holdings.map((h) => h.symbol));
+      holdingsPublic = holdings.map((h) => ({ symbol: h.symbol, name: names.get(h.symbol) ?? h.symbol }));
     }
-  } else if (p.totalAssets) {
-    totalAssets = user.cash;
+    if (p.totalAssets || p.profitRate) {
+      const quotes = await quotesFor(env, holdings.map((h) => h.symbol));
+      const value = holdingsValue(holdings, quotes);
+      const cost = holdings.reduce((sum, h) => sum + h.quantity * h.avg_price, 0);
+      if (p.totalAssets) totalAssets = user.cash + value;
+      if (p.profitRate) profitRate = cost > 0 ? Math.round(((value - cost) / cost) * 10_000) / 100 : 0;
+    }
   }
 
   let recentTrades: PublicProfile["recentTrades"] = null;
@@ -139,12 +159,13 @@ export async function publicProfile(env: Env, nickname: string): Promise<PublicP
 
   return {
     nickname: user.nickname,
+    accepts: parseInteractionSettings(user.interaction_settings),
     featuredBadge: user.featured_badge ? publicBadge(user.featured_badge) : null,
     joinedAt: user.created_at,
     badges: p.badges
       ? (await ownedBadges(env, user.id)).map(({ id, name, tier, flavor }) => ({ id, name, tier, flavor }))
       : null,
-    mainStock: p.mainSymbol ? stock : null,
+    holdings: holdingsPublic,
     bankruptCount: p.bankruptCount ? user.bankrupt_count : null,
     totalAssets,
     profitRate,

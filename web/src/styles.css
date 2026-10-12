@@ -1299,3 +1299,194 @@ button.wide {
 .logo {
   color: var(--text);
 }
+
+/* ---------- 내 계좌 · 파산 기준 ---------- */
+
+.summary h1 {
+  margin-bottom: 12px;
+}
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 0;
+}
+.summary-grid div {
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.summary-grid dt {
+  font-size: 12px;
+  color: var(--muted);
+}
+.summary-grid dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.summary-grid .total dd {
+  font-size: 18px;
+}
+table.holdings td a {
+  font-weight: 700;
+  text-decoration: none;
+}
+table.holdings small {
+  font-size: 11px;
+}
+.rule ul {
+  margin: 8px 0;
+  padding-left: 18px;
+  font-size: 14px;
+}
+.rule li + li {
+  margin-top: 4px;
+}
+.arena-link {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-decoration: none;
+}
+.arena-link:hover {
+  border-color: var(--muted);
+}
+a.chip {
+  text-decoration: none;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+select {
+  font: inherit;
+  color: inherit;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  min-width: 0;
+}
+
+/* ---------- 개미 광장 ---------- */
+
+.pill {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--up);
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+}
+.ix-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.ix-row p {
+  margin: 2px 0 0;
+}
+.ix-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-top: 12px;
+  background: var(--surface-2);
+}
+.ix-card p {
+  margin: 6px 0;
+}
+.ix-card.disabled {
+  opacity: 0.55;
+}
+section.card.ix-card {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+.ix-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.ix-head .link,
+.ix-head .muted {
+  margin-left: auto;
+}
+.ix-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.ix-actions .search {
+  flex: 1;
+  min-width: 180px;
+}
+.ix-actions label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ix-actions label input {
+  width: 120px;
+  text-align: right;
+}
+.player-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.player-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.player-list li button {
+  margin-left: auto;
+  padding: 6px 12px;
+}
+.soon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+.soon {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+}
+.soon strong {
+  color: var(--text);
+}
+.soon-tag {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+button.choice {
+  white-space: normal;
+}
+@media (max-width: 900px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

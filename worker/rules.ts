@@ -4,11 +4,15 @@ import type { GameChoice, GameDifficulty } from "../shared/protocol";
 
 export const INITIAL_CASH = 10_000_000;
 export const SALARY_AMOUNT = 1_000_000;
-/** 파산 기준 하한: 총자산 < max(메인 종목 1주 가격, 이 값) 이면 파산 */
+/**
+ * 파산 기준: 총자산(현금 + 보유 주식 전체 평가액)이 이 금액 "미만"이면 파산.
+ * 파산하면 보유 주식을 모두 현재가로 강제 매도하고 매매를 잠근다.
+ */
 export const BANKRUPT_FLOOR = 100_000;
-/** 파산 상태에서 현금이 max(메인 종목 1주 가격, 이 값) 이상이 되면 매매 재개 */
+/** 재기 기준: 파산 상태에서 현금이 이 금액 "이상"이 되면 매매 재개 */
 export const RECOVERY_CASH = 1_000_000;
-export const MAIN_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+/** 매수로 동시에 보유할 수 있는 최대 종목 수 */
+export const MAX_HOLDINGS = 20;
 
 /** 매매 수수료 0.015% */
 export const FEE_RATE = 0.00015;
@@ -63,13 +67,25 @@ export function classifyMove(difficulty: GameDifficulty, ratePct: number): strin
   }
 }
 
-export function bankruptThreshold(price: number): number {
-  return Math.max(price, BANKRUPT_FLOOR);
+export function isBankruptTotal(totalAssets: number): boolean {
+  return totalAssets < BANKRUPT_FLOOR;
 }
 
-export function recoveryTarget(price: number): number {
-  return Math.max(price, RECOVERY_CASH);
+export function canRecover(cash: number): boolean {
+  return cash >= RECOVERY_CASH;
 }
+
+// ---- 유저 간 상호작용 ----
+
+/** 받은 요청이 자동으로 만료되기까지 */
+export const INTERACTION_TTL_MS = 24 * 60 * 60 * 1000;
+/** 종류별로 하루에 보낼 수 있는 요청 수 */
+export const INTERACTION_DAILY_LIMIT = 1;
+/** 동시에 진행할 수 있는 맞짱 수 */
+export const DUEL_MAX_ACTIVE = 3;
+export const DUEL_DAYS = 7;
+export const STAKE_MIN = 100_000;
+export const STAKE_MAX = 1_000_000;
 
 export interface Settlement {
   amount: number;

@@ -4,7 +4,7 @@ import type { MyProfile, Privacy, PublicProfile } from "../../../shared/protocol
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { BadgeChip, Nickname, TIER_LABEL } from "../components/Badge";
-import { ALL_PRIVATE, PrivacyForm } from "../components/PrivacyForm";
+import { ALL_PRIVATE, InteractionForm, PrivacyForm } from "../components/PrivacyForm";
 import { dateTime, pct, won } from "../format";
 
 /** 가입 직후: 공개 범위부터 정한다 (기본 전부 비공개) */
@@ -37,7 +37,7 @@ export function ProfileSetup() {
         <PrivacyForm value={privacy} onChange={setPrivacy} />
         {error && <p className="error">{error}</p>}
         <button type="button" className="primary wide" disabled={busy} onClick={save}>
-          {busy ? "저장 중…" : "저장하고 종목 고르러 가기"}
+          {busy ? "저장 중…" : "저장하고 시작하기"}
         </button>
       </section>
     </main>
@@ -174,6 +174,17 @@ export function MyProfilePage() {
           onChange={(privacy) => apply(api.updateProfile({ privacy }), "공개 범위를 저장했습니다.")}
         />
       </section>
+
+      <section className="card">
+        <h2>상호작용 받기 설정</h2>
+        <p className="muted small">기본은 모두 거부예요. 켜 둔 상호작용만 다른 개미가 나에게 걸 수 있습니다.</p>
+        <InteractionForm
+          value={profile.interactionSettings}
+          onChange={(interactionSettings) =>
+            apply(api.updateProfile({ interactionSettings }), "상호작용 받기 설정을 저장했습니다.")
+          }
+        />
+      </section>
     </main>
   );
 }
@@ -216,8 +227,14 @@ export function UserProfilePage() {
         </div>
         <dl className="profile-stats">
           <div>
-            <dt>메인 종목</dt>
-            <dd>{profile.mainStock ? `${profile.mainStock.name} (${profile.mainStock.symbol})` : priv}</dd>
+            <dt>보유 종목</dt>
+            <dd>
+              {profile.holdings === null
+                ? priv
+                : profile.holdings.length === 0
+                  ? "없음"
+                  : profile.holdings.map((h) => h.name).join(", ")}
+            </dd>
           </div>
           <div>
             <dt>총자산</dt>
@@ -235,6 +252,20 @@ export function UserProfilePage() {
           </div>
         </dl>
       </section>
+      {(profile.accepts.allowSwap || profile.accepts.allowRaid || profile.accepts.allowDuel) && (
+        <section className="card">
+          <h2>상호작용</h2>
+          <p className="muted small">
+            {[profile.accepts.allowSwap && "🎁 블라인드 박스", profile.accepts.allowRaid && "🥷 기습 털기", profile.accepts.allowDuel && "🥊 수익률 맞짱"]
+              .filter(Boolean)
+              .join(" · ")}
+            을(를) 받아요.
+          </p>
+          <Link className="button primary" to={`/arena?target=${encodeURIComponent(profile.nickname)}`}>
+            개미 광장에서 도전하기
+          </Link>
+        </section>
+      )}
       <section className="card">
         <h2>배지</h2>
         {profile.badges === null ? (

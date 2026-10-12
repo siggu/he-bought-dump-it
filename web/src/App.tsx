@@ -10,7 +10,7 @@ import { AuthPage } from "./pages/AuthPage";
 import { Dashboard } from "./pages/Dashboard";
 import { Game } from "./pages/Game";
 import { History } from "./pages/History";
-import { Onboarding } from "./pages/Onboarding";
+import { Arena } from "./pages/Arena";
 import { MyProfilePage, ProfileSetup, UserProfilePage } from "./pages/Profile";
 import { StockDetail } from "./pages/StockDetail";
 import { useRealtime } from "./realtime";
@@ -40,21 +40,12 @@ function Shell() {
     );
   }
 
-  // 가입 직후: 공개 범위 설정 → 메인 종목 선택 순서
+  // 가입 직후: 공개 범위부터 정한다
   if (!me.user.profileSetupDone) {
     return (
       <>
         <Header />
         <ProfileSetup />
-      </>
-    );
-  }
-
-  if (!me.user.mainSymbol) {
-    return (
-      <>
-        <Header />
-        <Onboarding />
       </>
     );
   }
@@ -68,7 +59,7 @@ function Shell() {
         <Route path="/stocks/:symbol" element={<StockDetail />} />
         <Route path="/history" element={<History />} />
         <Route path="/game" element={<Game />} />
-        <Route path="/settings/main" element={<Onboarding />} />
+        <Route path="/arena" element={<Arena />} />
         <Route path="/profile" element={<MyProfilePage />} />
         <Route path="/u/:nickname" element={<UserProfilePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -123,16 +114,17 @@ function Header() {
       <Link to="/" className="logo">
         <Logo />
       </Link>
-      {me?.user.mainSymbol && (
-        <StockSearch placeholder="다른 종목 검색 (조회 전용)" onSelect={(s) => navigate(`/stocks/${s.symbol}`)} />
+      {me?.user.profileSetupDone && (
+        <StockSearch placeholder="종목 검색" onSelect={(s) => navigate(`/stocks/${s.symbol}`)} />
       )}
       <nav>
-        {me?.user.mainSymbol && (
+        {me?.user.profileSetupDone && (
           <>
             <NavLink to="/" end>
-              대시보드
+              내 계좌
             </NavLink>
             <NavLink to="/history">거래내역</NavLink>
+            <NavLink to="/arena">개미 광장</NavLink>
             {me.user.isBankrupt && <NavLink to="/game">미니게임</NavLink>}
           </>
         )}

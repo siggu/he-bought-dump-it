@@ -22,7 +22,7 @@ import {
   GAME_WINDOW,
   NORMAL_HORIZON,
   classifyMove,
-  recoveryTarget,
+  RECOVERY_CASH,
 } from "./rules";
 
 /** 쉬움 난이도에 나오는 인기 종목 */
@@ -94,7 +94,7 @@ async function usage(env: Env, userId: number, now: number): Promise<{ today: nu
 
 export async function gameStatus(env: Env, userId: number): Promise<GameStatus> {
   const now = Date.now();
-  const { user, quote } = await evaluateAccount(env, userId);
+  const { user } = await evaluateAccount(env, userId);
   const used = await usage(env, userId, now);
   const open = await env.DB.prepare(
     `SELECT question FROM game_sessions
@@ -111,7 +111,7 @@ export async function gameStatus(env: Env, userId: number): Promise<GameStatus> 
     monthlyLimit: GAME_MONTHLY_LIMIT,
     rewards: GAME_REWARDS,
     cash: user.cash,
-    recoveryTarget: recoveryTarget(quote?.price ?? 0),
+    recoveryTarget: RECOVERY_CASH,
     current: open ? (JSON.parse(open.question) as GameQuestion) : null,
   };
 }
@@ -126,14 +126,14 @@ function limitError(used: { today: number; month: number }): UserError | null {
   return null;
 }
 
-interface Built {
+export interface Built {
   symbol: string;
   question: Omit<GameQuestion, "gameId" | "expiresAt">;
   answer: string;
   reveal: StoredReveal;
 }
 
-async function buildQuestion(env: Env, difficulty: GameDifficulty): Promise<Built | null> {
+export async function buildQuestion(env: Env, difficulty: GameDifficulty): Promise<Built | null> {
   const stock =
     difficulty === "easy"
       ? await env.DB.prepare(
@@ -278,7 +278,7 @@ export async function answerGame(env: Env, userId: number, gameId: string, choic
   await onGameAnswered(env, userId, game.difficulty, correct, now);
 
   // 보상으로 복구 기준을 넘었으면 여기서 파산 해제된다.
-  const { user, quote } = await evaluateAccount(env, userId);
+  const { user } = await evaluateAccount(env, userId);
   const reveal = JSON.parse(game.reveal) as StoredReveal;
   return {
     correct,
@@ -291,6 +291,6 @@ export async function answerGame(env: Env, userId: number, gameId: string, choic
     reveal: reveal.candles,
     cash: user.cash,
     recovered: user.is_bankrupt === 0,
-    recoveryTarget: recoveryTarget(quote?.price ?? 0),
+    recoveryTarget: RECOVERY_CASH,
   };
 }

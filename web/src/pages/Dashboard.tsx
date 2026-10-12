@@ -1,60 +1,43 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import type { MeResponse, PublicBadge } from "../../../shared/protocol";
-import { Nickname } from "../components/Badge";
+import type { PublicBadge, StockInfo } from "../../../shared/protocol";
 import { api } from "../api";
 import { useAuth, useMe } from "../auth";
-import { ChartPanel } from "../components/ChartPanel";
-import { OrderPanel } from "../components/OrderPanel";
-import { QuoteHeader } from "../components/QuoteHeader";
-import { dateTime, num, pct, signed, trend, won } from "../format";
-import { useRealtime } from "../realtime";
+import { Nickname } from "../components/Badge";
+import { BankruptRule } from "../components/BankruptRule";
+import { num, pct, signed, trend, won } from "../format";
 
-// worker/rules.ts 의 BANKRUPT_FLOOR
-const BANKRUPT_FLOOR = 100_000;
+export const POPULAR: StockInfo[] = [
+  { symbol: "005930", name: "삼성전자", market: "KOSPI" },
+  { symbol: "000660", name: "SK하이닉스", market: "KOSPI" },
+  { symbol: "373220", name: "LG에너지솔루션", market: "KOSPI" },
+  { symbol: "005380", name: "현대차", market: "KOSPI" },
+  { symbol: "035420", name: "NAVER", market: "KOSPI" },
+  { symbol: "035720", name: "카카오", market: "KOSPI" },
+  { symbol: "068270", name: "셀트리온", market: "KOSPI" },
+  { symbol: "247540", name: "에코프로비엠", market: "KOSDAQ" },
+];
 
+/** 내 계좌: 보유 종목은 1분 캐시 시세로 평가하고, 실시간 시세는 종목 화면에서만 받는다. */
 export function Dashboard() {
   const me = useMe();
-  const { setMe, refresh } = useAuth();
-  const symbol = me.user.mainSymbol!;
-  const rt = useRealtime(symbol);
-  const [toast, setToast] = useState<string | null>(null);
-  const quote = rt.quote ?? me.quote;
-  const price = quote?.price ?? null;
-  const marketOpen = rt.status.market ? rt.status.market === "open" : me.market.open;
+  const { refresh } = useAuth();
 
-  // 실시간 가격으로 계산한 총자산이 파산 기준 아래로 내려가면 서버에 재평가를 요청한다.
-  const qty = me.holding?.quantity ?? 0;
-  const evaluation = qty * (price ?? 0);
-  const total = me.user.cash + evaluation;
-  const cost = qty * (me.holding?.avgPrice ?? 0);
-  const profit = evaluation - cost;
-  const bankruptLine = Math.max(price ?? 0, BANKRUPT_FLOOR);
-  const lastCheck = useRef(0);
+  // 화면이 보이는 동안 1분마다 평가금액 갱신 (서버 캐시 공유라 KIS 호출은 늘지 않는다)
   useEffect(() => {
-    if (me.user.isBankrupt || price === null || total >= bankruptLine) return;
-    if (Date.now() - lastCheck.current < 10_000) return;
-    lastCheck.current = Date.now();
-    refresh().catch(() => undefined);
-  }, [me.user.isBankrupt, price, total, bankruptLine, refresh]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = window.setTimeout(() => setToast(null), 3500);
-    return () => window.clearTimeout(t);
-  }, [toast]);
-
-  const onOrderDone = (next: MeResponse, message: string) => {
-    setMe(next);
-    setToast(message);
-  };
+    const t = window.setInterval(() => {
+      if (!document.hidden) refresh().catch(() => undefined);
+    }, 60_000);
+    return () => window.clearInterval(t);
+  }, [refresh]);
 
   return (
     <main>
       {me.user.isBankrupt && (
         <div className="banner bankrupt">
           <div>
-            <strong>💸 파산했습니다!</strong> 보유 주식은 강제 청산됐고 매매가 잠겼어요. (누적 파산 {me.user.bankruptCount}회)
+            <strong>💸 파산했습니다!</strong> 총자산이 {won(me.thresholds.bankrupt)} 미만이 되어 보유 주식이 모두 강제
+            매도됐고 매매가 잠겼어요. (누적 파산 {me.user.bankruptCount}회)
             <br />
             현금 {won(me.thresholds.recovery)} 이상을 모으면 다시 매매할 수 있습니다.
           </div>
@@ -65,64 +48,93 @@ export function Dashboard() {
       )}
       <div className="grid">
         <div className="col-main">
-          <section className="card">
-            <QuoteHeader
-              name={me.user.mainName ?? symbol}
-              symbol={symbol}
-              quote={quote}
-              live={rt.live}
-              badge="메인 종목"
-            />
-          </section>
-          <ChartPanel symbol={symbol} quote={quote} ticks={rt.ticks} marketOpen={marketOpen} />
-        </div>
-        <div className="col-side">
-          <OrderPanel me={me} price={price} onDone={onOrderDone} />
-          <section className="card portfolio">
-            <h2>내 계좌</h2>
-            <dl>
+          <section className="card summary">
+            <h1>내 계좌</h1>
+            <dl className="summary-grid">
               <div className="total">
                 <dt>총자산</dt>
-                <dd>{won(total)}</dd>
+                <dd>{won(me.totals.total)}</dd>
               </div>
               <div>
                 <dt>현금</dt>
                 <dd>{won(me.user.cash)}</dd>
               </div>
               <div>
-                <dt>보유</dt>
-                <dd>
-                  {num(qty)}주 {qty > 0 && <span className="muted">(평단 {won(me.holding!.avgPrice)})</span>}
-                </dd>
-              </div>
-              <div>
-                <dt>평가금액</dt>
-                <dd>{won(evaluation)}</dd>
+                <dt>주식 평가금액</dt>
+                <dd>{won(me.totals.evaluation)}</dd>
               </div>
               <div>
                 <dt>평가손익</dt>
-                <dd className={trend(profit)}>
-                  {signed(profit)}원 {cost > 0 && `(${pct((profit / cost) * 100)})`}
+                <dd className={trend(me.totals.profit)}>
+                  {signed(me.totals.profit)}원 ({pct(me.totals.profitRate)})
                 </dd>
-              </div>
-              <div>
-                <dt>파산 기준</dt>
-                <dd className="muted">총자산 {won(bankruptLine)} 미만</dd>
               </div>
             </dl>
           </section>
+
+          <section className="card">
+            <h2>보유 종목 {me.holdings.length > 0 && <span className="muted small">{me.holdings.length}종목</span>}</h2>
+            {me.holdings.length === 0 ? (
+              <p className="muted">아직 보유한 주식이 없어요. 위 검색창이나 아래 인기 종목에서 종목을 골라 매수해 보세요.</p>
+            ) : (
+              <div className="table-wrap">
+                <table className="holdings">
+                  <thead>
+                    <tr>
+                      <th>종목</th>
+                      <th className="num">수량</th>
+                      <th className="num">평균 단가</th>
+                      <th className="num">현재가</th>
+                      <th className="num">평가금액</th>
+                      <th className="num">손익</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {me.holdings.map((h) => (
+                      <tr key={h.symbol}>
+                        <td>
+                          <Link to={`/stocks/${h.symbol}`}>{h.name}</Link>
+                        </td>
+                        <td className="num">{num(h.quantity)}</td>
+                        <td className="num">{num(h.avgPrice)}</td>
+                        <td className={`num ${trend(h.rate ?? 0)}`}>{h.price !== null ? num(h.price) : "-"}</td>
+                        <td className="num">{num(h.evaluation)}</td>
+                        <td className={`num ${trend(h.profit)}`}>
+                          {signed(h.profit)}
+                          <br />
+                          <small>{pct(h.profitRate)}</small>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="muted small">평가금액은 1분마다 갱신돼요. 실시간 시세는 종목을 눌러 들어가면 그 종목만 받아요.</p>
+          </section>
+
+          <section className="card">
+            <h2>인기 종목</h2>
+            <div className="chips">
+              {POPULAR.map((s) => (
+                <Link key={s.symbol} className="chip" to={`/stocks/${s.symbol}`}>
+                  {s.name}
+                </Link>
+              ))}
+            </div>
+          </section>
+        </div>
+        <div className="col-side">
+          <BankruptRule me={me} />
           <SalaryCard />
+          <Link to="/arena" className="card arena-link">
+            <strong>🐜 개미 광장</strong>
+            <span className="muted small">블라인드 박스 교환 · 기습 털기 · 1:1 수익률 맞짱</span>
+          </Link>
           <HallOfFame />
         </div>
       </div>
-      {toast && (
-        <div className="toast" role="status">
-          {toast}
-        </div>
-      )}
-      <p className="muted small center">
-        {me.market.feed === "mock" ? "모의 시세" : "한국투자증권 시세"} · 마지막 갱신 {quote ? dateTime(quote.at) : "-"}
-      </p>
+      <p className="muted small center">{me.market.feed === "mock" ? "모의 시세" : "한국투자증권 시세"}</p>
     </main>
   );
 }

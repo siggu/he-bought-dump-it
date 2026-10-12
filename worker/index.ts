@@ -4,7 +4,6 @@ import {
   buildMe,
   claimSalary,
   placeOrder,
-  setMainSymbol,
   UserError,
 } from "./account";
 import {
@@ -30,6 +29,7 @@ import {
   updateProfile,
 } from "./profile";
 import { publicBadge } from "./badges";
+import { arenaState, createDuel, createSwap, prepareRaid, respond, submitRaid } from "./arena";
 import { DIFFICULTIES, answerGame, gameStatus, startGame } from "./game";
 import { INITIAL_CASH } from "./rules";
 import { kst } from "./market";
@@ -142,21 +142,17 @@ app.use("/game", requireAuth);
 app.use("/game/*", requireAuth);
 app.use("/hall-of-fame", requireAuth);
 app.use("/users/*", requireAuth);
+app.use("/arena", requireAuth);
+app.use("/arena/*", requireAuth);
 
 app.get("/me", async (c) => c.json(await buildMe(c.env, c.get("user").id)));
-
-app.post("/me/main-symbol", async (c) => {
-  const { symbol } = await body<{ symbol: string }>(c.req.raw);
-  const s = String(symbol ?? "").toUpperCase();
-  if (!SYMBOL_RE.test(s)) return c.json({ error: "잘못된 종목코드입니다." }, 400);
-  await setMainSymbol(c.env, c.get("user").id, s);
-  return c.json(await buildMe(c.env, c.get("user").id));
-});
 
 app.get("/me/profile", async (c) => c.json(await myProfile(c.env, c.get("user").id)));
 
 app.post("/me/profile", async (c) => {
-  const input = await body<{ privacy: unknown; featuredBadge: unknown; setupDone: unknown }>(c.req.raw);
+  const input = await body<{ privacy: unknown; interactionSettings: unknown; featuredBadge: unknown; setupDone: unknown }>(
+    c.req.raw,
+  );
   await updateProfile(c.env, c.get("user").id, input);
   return c.json(await myProfile(c.env, c.get("user").id));
 });
@@ -210,9 +206,11 @@ app.get("/stocks/:symbol/daily", async (c) => {
 });
 
 app.post("/orders", async (c) => {
-  const { side, quantity } = await body<{ side: string; quantity: number }>(c.req.raw);
+  const { symbol, side, quantity } = await body<{ symbol: string; side: string; quantity: number }>(c.req.raw);
+  const s = String(symbol ?? "").toUpperCase();
+  if (!SYMBOL_RE.test(s)) return c.json({ error: "잘못된 종목코드입니다." }, 400);
   if (side !== "buy" && side !== "sell") return c.json({ error: "주문 구분이 올바르지 않습니다." }, 400);
-  const result = await placeOrder(c.env, c.get("user").id, side, Number(quantity));
+  const result = await placeOrder(c.env, c.get("user").id, s, side, Number(quantity));
   return c.json({ result, me: await buildMe(c.env, c.get("user").id) });
 });
 
@@ -244,6 +242,39 @@ app.post("/game/answer", async (c) => {
   const { gameId, choice } = await body<{ gameId: string; choice: string }>(c.req.raw);
   if (typeof gameId !== "string" || typeof choice !== "string") return c.json({ error: "잘못된 요청입니다." }, 400);
   return c.json(await answerGame(c.env, c.get("user").id, gameId, choice));
+});
+
+// ------------------------------------------------------- 유저 간 상호작용
+
+app.get("/arena", async (c) => c.json(await arenaState(c.env, c.get("user").id, c.req.query("target"))));
+
+app.post("/arena/swap", async (c) => {
+  const { nickname, symbol } = await body<{ nickname: string; symbol: string }>(c.req.raw);
+  await createSwap(c.env, c.get("user").id, String(nickname ?? ""), String(symbol ?? "").toUpperCase());
+  return c.json(await arenaState(c.env, c.get("user").id));
+});
+
+app.post("/arena/raid", async (c) => {
+  const { nickname } = await body<{ nickname: string }>(c.req.raw);
+  return c.json(await prepareRaid(c.env, c.get("user").id, String(nickname ?? "")));
+});
+
+app.post("/arena/raid/:id/submit", async (c) => {
+  const { choice, stake } = await body<{ choice: string; stake: number }>(c.req.raw);
+  await submitRaid(c.env, c.get("user").id, c.req.param("id"), choice, stake);
+  return c.json(await arenaState(c.env, c.get("user").id));
+});
+
+app.post("/arena/duel", async (c) => {
+  const { nickname, symbol, stake } = await body<{ nickname: string; symbol: string; stake: number }>(c.req.raw);
+  await createDuel(c.env, c.get("user").id, String(nickname ?? ""), String(symbol ?? "").toUpperCase(), stake);
+  return c.json(await arenaState(c.env, c.get("user").id));
+});
+
+app.post("/arena/:id/:action", async (c) => {
+  const input = await body<Record<string, unknown>>(c.req.raw);
+  await respond(c.env, c.get("user").id, c.req.param("id"), c.req.param("action"), input);
+  return c.json(await arenaState(c.env, c.get("user").id));
 });
 
 app.get("/hall-of-fame", async (c) => {

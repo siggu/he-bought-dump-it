@@ -1,9 +1,11 @@
 import type {
+  ArenaState,
   Candle,
   GameDifficulty,
   GameQuestion,
   GameResult,
   GameStatus,
+  InteractionSettings,
   MeResponse,
   MyProfile,
   OrderRow,
@@ -40,12 +42,12 @@ export const api = {
   login: (email: string, password: string) => request<{ ok: true }>("POST", "/auth/login", { email, password }),
   logout: () => request<{ ok: true }>("POST", "/auth/logout"),
   me: () => request<MeResponse>("GET", "/me"),
-  setMainSymbol: (symbol: string) => request<MeResponse>("POST", "/me/main-symbol", { symbol }),
   search: (q: string) => request<{ results: StockInfo[] }>("GET", `/stocks/search?q=${encodeURIComponent(q)}`),
   stock: (symbol: string) => request<{ stock: StockInfo }>("GET", `/stocks/${symbol}`),
   daily: (symbol: string) => request<{ candles: Candle[] }>("GET", `/stocks/${symbol}/daily`),
-  order: (side: "buy" | "sell", quantity: number) =>
+  order: (symbol: string, side: "buy" | "sell", quantity: number) =>
     request<{ result: { price: number; quantity: number; total: number }; me: MeResponse }>("POST", "/orders", {
+      symbol,
       side,
       quantity,
     }),
@@ -60,9 +62,27 @@ export const api = {
       "/hall-of-fame",
     ),
   myProfile: () => request<MyProfile>("GET", "/me/profile"),
-  updateProfile: (input: { privacy?: Partial<Privacy>; featuredBadge?: string | null; setupDone?: boolean }) =>
+  updateProfile: (input: {
+    privacy?: Partial<Privacy>;
+    interactionSettings?: Partial<InteractionSettings>;
+    featuredBadge?: string | null;
+    setupDone?: boolean;
+  }) =>
     request<MyProfile>("POST", "/me/profile", input),
   changeNickname: (nickname: string) => request<MyProfile>("POST", "/me/nickname", { nickname }),
   badgesSeen: () => request<{ ok: true }>("POST", "/me/badges/seen"),
   user: (nickname: string) => request<PublicProfile>("GET", `/users/${encodeURIComponent(nickname)}`),
+  arena: (target?: string | null) =>
+    request<ArenaState>("GET", target ? `/arena?target=${encodeURIComponent(target)}` : "/arena"),
+  swap: (nickname: string, symbol: string) => request<ArenaState>("POST", "/arena/swap", { nickname, symbol }),
+  raid: (nickname: string) =>
+    request<{ id: string; question: Omit<GameQuestion, "gameId" | "expiresAt">; expiresAt: number }>("POST", "/arena/raid", {
+      nickname,
+    }),
+  submitRaid: (id: string, choice: string, stake: number) =>
+    request<ArenaState>("POST", `/arena/raid/${id}/submit`, { choice, stake }),
+  duel: (nickname: string, symbol: string, stake: number) =>
+    request<ArenaState>("POST", "/arena/duel", { nickname, symbol, stake }),
+  respond: (id: string, action: "accept" | "decline" | "cancel", input: Record<string, unknown> = {}) =>
+    request<ArenaState>("POST", `/arena/${id}/${action}`, input),
 };

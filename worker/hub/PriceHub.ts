@@ -23,8 +23,8 @@ interface ClientAttachment {
   symbols: string[];
 }
 
-/** 연결 1개당 동시 구독 수: 메인 종목 1 + 조회 중인 종목 1 */
-export const MAX_SYMBOLS_PER_CLIENT = 2;
+/** 연결 1개당 실시간 구독 수: 지금 보고 있는 종목 1개 (트래픽 절감) */
+export const MAX_SYMBOLS_PER_CLIENT = 1;
 const FLUSH_INTERVAL_MS = 1_000;
 const TICK_HISTORY = 600;
 const RECONCILE_INTERVAL_MS = 30_000;
@@ -81,6 +81,19 @@ export class PriceHub extends DurableObject<Env> {
     return fresh;
   }
 
+  /** 여러 종목 시세. 못 불러온 종목은 결과에서 빠진다. */
+  async getQuotes(symbols: string[], maxAgeMs = 60_000): Promise<Record<string, Quote>> {
+    const out: Record<string, Quote> = {};
+    for (const s of [...new Set(symbols)]) {
+      try {
+        out[s] = await this.getQuote(s, maxAgeMs);
+      } catch (err) {
+        console.error("quote failed", s, err);
+      }
+    }
+    return out;
+  }
+
   /** 최근 일봉(오래된 순) */
   async getDailyCandles(symbol: string): Promise<Candle[]> {
     if (this.feed === "mock") return mockDailyCandles(symbol);
@@ -131,11 +144,8 @@ export class PriceHub extends DurableObject<Env> {
     if (msg.op === "sub") {
       if (!att.symbols.includes(symbol)) {
         if (att.symbols.length >= MAX_SYMBOLS_PER_CLIENT) {
-          this.send(ws, {
-            type: "error",
-            message: `실시간 시세는 동시에 ${MAX_SYMBOLS_PER_CLIENT}종목까지만 볼 수 있습니다.`,
-          });
-          return;
+          // 새 종목을 보면 이전 종목 구독은 자동으로 해제한다.
+          att.symbols = att.symbols.slice(att.symbols.length - MAX_SYMBOLS_PER_CLIENT + 1);
         }
         att.symbols.push(symbol);
         ws.serializeAttachment(att);

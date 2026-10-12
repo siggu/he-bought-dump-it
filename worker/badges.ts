@@ -3,6 +3,7 @@
 // 다른 사람에게는 이름·등급·한 줄 설명(flavor)만 보인다.
 
 import type { BadgeTier, OwnedBadge, PublicBadge, Quote } from "../shared/protocol";
+import type { HoldingRow } from "./account";
 import type { Env } from "./env";
 import { isTradingDay, kst, kstDayStart, parseHolidays } from "./market";
 import { SALARY_AMOUNT } from "./rules";
@@ -57,12 +58,17 @@ export const BADGES: BadgeDef[] = [
   { id: "loyal_salaryman", name: "성실한 월급쟁이", tier: "epic", flavor: "꼬박꼬박이 제일 무섭다.", condition: "월급 6개월 연속 수령" },
   { id: "salary_gone", name: "월급 순삭", tier: "rare", flavor: "통장을 스쳐 지나갔다.", condition: "월급을 받고 1분 안에 월급 이상 금액을 매수" },
   // 이스터에그
-  { id: "migratory", name: "철새 개미", tier: "rare", flavor: "이 종목 저 종목.", condition: "메인 종목 5번 변경" },
+  { id: "migratory", name: "철새 개미", tier: "rare", flavor: "이 종목 저 종목.", condition: "하루에 서로 다른 5종목 이상 매수" },
   { id: "broker_vip", name: "증권사 VIP", tier: "epic", flavor: "증권사가 고마워합니다.", condition: "누적 수수료 100만원 이상" },
   { id: "taxpayer", name: "애국 납세자", tier: "epic", flavor: "나라 살림에 보탬이.", condition: "누적 거래세 100만원 이상" },
   { id: "lucky_seven", name: "럭키 세븐", tier: "rare", flavor: "7 7 7 잭팟?", condition: "정확히 777주 매수" },
   { id: "non_possession", name: "무소유", tier: "legendary", flavor: "가진 것이 없으니 잃을 것도 없다.", condition: "총자산 정확히 0원" },
   { id: "night_owl", name: "올빼미 개미", tier: "common", flavor: "장은 아직 안 열었어요.", condition: "새벽 3~4시 접속" },
+  // 유저 간 상호작용
+  { id: "blind_date", name: "블라인드 데이트", tier: "common", flavor: "열어 보기 전까진 모른다.", condition: "블라인드 박스 교환 첫 성사" },
+  { id: "raider", name: "털이범", tier: "rare", flavor: "소리 없이 다가가 한 주를…", condition: "기습 털기 첫 성공" },
+  { id: "got_raided", name: "털렸다", tier: "common", flavor: "문단속 잘합시다.", condition: "기습 털기로 주식을 빼앗김" },
+  { id: "duel_winner", name: "맞짱의 신", tier: "epic", flavor: "한 판 붙자고? 좋지.", condition: "1:1 수익률 맞짱 승리" },
 ];
 
 const BY_ID = new Map(BADGES.map((b) => [b.id, b]));
@@ -81,7 +87,7 @@ export function ownedBadge(id: string, earnedAt: number): OwnedBadge | null {
   return b ? { ...publicBadge(id)!, condition: b.condition, earnedAt } : null;
 }
 
-async function award(env: Env, userId: number, ids: string[], now: number): Promise<void> {
+export async function award(env: Env, userId: number, ids: string[], now: number): Promise<void> {
   const valid = [...new Set(ids)].filter(isBadgeId);
   if (valid.length === 0) return;
   await env.DB.batch(
@@ -140,6 +146,7 @@ async function kstDates(env: Env, sql: string, ...binds: unknown[]): Promise<Set
 
 export interface OrderContext {
   side: "buy" | "sell";
+  symbol: string;
   quantity: number;
   price: number;
   total: number;
@@ -203,11 +210,13 @@ export async function checkOrderBadges(env: Env, userId: number, o: OrderContext
 
   const sums = await env.DB.prepare(
     `SELECT COALESCE(SUM(fee), 0) AS fee, COALESCE(SUM(tax), 0) AS tax,
-            COUNT(CASE WHEN created_at >= ?2 AND side IN ('buy', 'sell') THEN 1 END) AS today
+            COUNT(CASE WHEN created_at >= ?2 AND side IN ('buy', 'sell') THEN 1 END) AS today,
+            COUNT(DISTINCT CASE WHEN created_at >= ?2 AND side = 'buy' THEN symbol END) AS buy_symbols
        FROM orders WHERE user_id = ?1`,
   )
     .bind(userId, dayStart)
-    .first<{ fee: number; tax: number; today: number }>();
+    .first<{ fee: number; tax: number; today: number; buy_symbols: number }>();
+  if ((sums?.buy_symbols ?? 0) >= 5) ids.push("migratory");
   if ((sums?.fee ?? 0) >= 1_000_000) ids.push("broker_vip");
   if ((sums?.tax ?? 0) >= 1_000_000) ids.push("taxpayer");
   if ((sums?.today ?? 0) >= 20) ids.push("finger_workout");
@@ -218,10 +227,8 @@ export async function checkOrderBadges(env: Env, userId: number, o: OrderContext
 export interface AccountContext {
   cash: number;
   isBankrupt: boolean;
-  symbol: string | null;
-  quantity: number;
-  avgPrice: number;
-  quote: Quote | null;
+  holdings: HoldingRow[];
+  quotes: Map<string, Quote>;
   now: number;
 }
 
@@ -231,46 +238,52 @@ export async function checkAccountBadges(env: Env, userId: number, a: AccountCon
   const minutes = kst(a.now).minutes;
   if (minutes >= 3 * 60 && minutes < 4 * 60) ids.push("night_owl");
 
-  const price = a.quote?.price ?? 0;
-  const total = a.cash + a.quantity * price;
-  if (a.quote) {
+  const complete = a.holdings.every((h) => a.quotes.has(h.symbol));
+  const total = a.cash + a.holdings.reduce((s, h) => s + h.quantity * (a.quotes.get(h.symbol)?.price ?? 0), 0);
+  if (complete) {
     if (total >= 20_000_000) ids.push("double_up");
     if (total >= 100_000_000) ids.push("billionaire");
-    if (total === 0 && a.quantity === 0) ids.push("non_possession");
-    if (a.quantity > 0 && a.avgPrice > 0) {
-      const rate = (price - a.avgPrice) / a.avgPrice;
-      if (rate <= -0.5) ids.push("half_cut");
-      if (rate >= 9) ids.push("ten_bagger");
+    if (total === 0 && a.holdings.length === 0) ids.push("non_possession");
+  }
+  for (const h of a.holdings) {
+    const q = a.quotes.get(h.symbol);
+    if (!q || h.avg_price <= 0) continue;
+    const rate = (q.price - h.avg_price) / h.avg_price;
+    if (rate <= -0.5) ids.push("half_cut");
+    if (rate >= 9) ids.push("ten_bagger");
+  }
+
+  if (a.quotes.size > 0) {
+    // 그가 샀습니다: 오늘 당일 고가에 산 종목이 지금 그 매수가보다 5% 이상 낮다.
+    const { results } = await env.DB.prepare(
+      `SELECT symbol, MAX(price) AS price FROM orders
+        WHERE user_id = ? AND side = 'buy' AND created_at >= ? AND day_high IS NOT NULL AND price >= day_high
+        GROUP BY symbol`,
+    )
+      .bind(userId, kstDayStart(a.now))
+      .all<{ symbol: string; price: number }>();
+    if (results.some((r) => { const q = a.quotes.get(r.symbol); return q !== undefined && q.price <= r.price * 0.95; })) {
+      ids.push("peak_buyer");
     }
   }
 
-  if (a.symbol && a.quote) {
-    // 그가 샀습니다: 오늘 당일 고가에 산 주문이 있고, 지금 가격이 그보다 5% 이상 낮다.
-    const peak = await env.DB.prepare(
-      `SELECT 1 FROM orders
-        WHERE user_id = ? AND symbol = ? AND side = 'buy' AND created_at >= ?
-          AND day_high IS NOT NULL AND price >= day_high AND price * 0.95 >= ?
-        LIMIT 1`,
-    )
-      .bind(userId, a.symbol, kstDayStart(a.now), a.quote.price)
-      .first();
-    if (peak) ids.push("peak_buyer");
-  }
-
-  if (a.quantity > 0) {
-    // 존버: 마지막 매도(또는 청산) 이후 첫 매수가 30일 이상 지났다.
+  if (a.holdings.length > 0) {
+    // 존버: 종목별로 마지막 매도(또는 청산) 이후 첫 매수가 30일 이상 지났다.
     const row = await env.DB.prepare(
-      `SELECT MIN(created_at) AS since FROM orders
-        WHERE user_id = ?1 AND side = 'buy'
-          AND created_at > COALESCE((SELECT MAX(created_at) FROM orders
-                                      WHERE user_id = ?1 AND side IN ('sell', 'liquidation')), 0)`,
+      `SELECT MIN(since) AS since FROM (
+         SELECT (SELECT MIN(o.created_at) FROM orders o
+                  WHERE o.user_id = h.user_id AND o.symbol = h.symbol AND o.side = 'buy'
+                    AND o.created_at > COALESCE((SELECT MAX(created_at) FROM orders
+                                                  WHERE user_id = h.user_id AND symbol = h.symbol
+                                                    AND side IN ('sell', 'liquidation')), 0)) AS since
+           FROM holdings h WHERE h.user_id = ? AND h.quantity > 0)`,
     )
       .bind(userId)
       .first<{ since: number | null }>();
     if (row?.since && a.now - row.since >= 30 * 86_400_000) ids.push("diamond_hands");
   }
 
-  if (!a.isBankrupt && a.quote) {
+  if (!a.isBankrupt && complete) {
     // 불사조: 마지막 재기 이후 다시 파산하지 않았고, 총자산이 재기 시점 현금의 1.5배 이상
     const rec = await env.DB.prepare(
       `SELECT value, created_at FROM user_events WHERE user_id = ? AND type = 'recover'
@@ -363,19 +376,6 @@ export async function onSalary(env: Env, userId: number, now: number): Promise<v
     .all<{ created_at: number }>();
   const months = new Set(results.map((r) => kst(r.created_at).month));
   if (monthStreak(months, now) >= 6) await award(env, userId, ["loyal_salaryman"], now);
-}
-
-/** 메인 종목 변경 직후 (최초 선택 제외) */
-export async function onMainChange(env: Env, userId: number, now: number): Promise<void> {
-  await env.DB.prepare("INSERT INTO user_events (user_id, type, created_at) VALUES (?, 'main_change', ?)")
-    .bind(userId, now)
-    .run();
-  const row = await env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM user_events WHERE user_id = ? AND type = 'main_change'",
-  )
-    .bind(userId)
-    .first<{ n: number }>();
-  if ((row?.n ?? 0) >= 5) await award(env, userId, ["migratory"], now);
 }
 
 /** 아직 확인하지 않은 배지 */

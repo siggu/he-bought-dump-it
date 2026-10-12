@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Candle } from "../shared/protocol";
+import { closeOnOrBefore, duelEndAt, priceBand } from "../worker/arena";
 import { BADGES, monthStreak, tradingStreak } from "../worker/badges";
 import { parseKisMessage, subscriptionMessage } from "../worker/hub/kis";
 import { basePrice, mockDailyCandles } from "../worker/hub/mock";
@@ -15,11 +16,11 @@ import {
 } from "../worker/market";
 import {
   GAME_WINDOW,
-  bankruptThreshold,
   buySettlement,
+  canRecover,
+  isBankruptTotal,
   classifyMove,
   maxBuyQuantity,
-  recoveryTarget,
   sellSettlement,
 } from "../worker/rules";
 
@@ -145,11 +146,11 @@ describe("매매 정산", () => {
     expect(buySettlement(71_500, q + 1).total).toBeGreaterThan(10_000_000);
   });
 
-  it("파산·복구 기준", () => {
-    expect(bankruptThreshold(71_500)).toBe(100_000);
-    expect(bankruptThreshold(1_200_000)).toBe(1_200_000);
-    expect(recoveryTarget(71_500)).toBe(1_000_000);
-    expect(recoveryTarget(1_200_000)).toBe(1_200_000);
+  it("파산·재기 기준: 총자산 10만원 미만이면 파산, 현금 100만원 이상이면 재기", () => {
+    expect(isBankruptTotal(99_999)).toBe(true);
+    expect(isBankruptTotal(100_000)).toBe(false);
+    expect(canRecover(999_999)).toBe(false);
+    expect(canRecover(1_000_000)).toBe(true);
   });
 });
 
@@ -236,5 +237,28 @@ describe("배지 연속 판정", () => {
     expect(new Set(BADGES.map((b) => b.id)).size).toBe(BADGES.length);
     expect(new Set(BADGES.map((b) => b.name)).size).toBe(BADGES.length);
     expect(BADGES.every((b) => b.name && b.flavor && b.condition)).toBe(true);
+  });
+});
+
+describe("유저 간 상호작용", () => {
+  it("블라인드 박스 힌트는 가격대만 알려 준다", () => {
+    expect(priceBand(8_080)).toBe("1만원 미만");
+    expect(priceBand(10_000)).toBe("1만~5만원대");
+    expect(priceBand(71_500)).toBe("5만~10만원대");
+    expect(priceBand(380_000)).toBe("10만~50만원대");
+    expect(priceBand(1_200_000)).toBe("50만원 이상");
+  });
+
+  it("맞짱은 수락한 날로부터 7일 뒤 15:30(KST)에 끝난다", () => {
+    // 2026-10-12(월) 10:00 KST 수락 → 2026-10-19 15:30 KST = 06:30 UTC
+    expect(duelEndAt(Date.UTC(2026, 9, 12, 1, 0))).toBe(Date.UTC(2026, 9, 19, 6, 30));
+  });
+
+  it("종료일 종가는 그날 이전 마지막 거래일 종가", () => {
+    const c = (date: string, close: number) => ({ date, open: close, high: close, low: close, close, volume: 0 });
+    const candles = [c("2026-10-15", 100), c("2026-10-16", 110), c("2026-10-19", 120)];
+    expect(closeOnOrBefore(candles, "2026-10-18")).toBe(110);
+    expect(closeOnOrBefore(candles, "2026-10-19")).toBe(120);
+    expect(closeOnOrBefore(candles, "2026-10-01")).toBeNull();
   });
 });
