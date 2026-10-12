@@ -112,7 +112,7 @@ export function TickChart({ ticks, up }: { ticks: TickPoint[]; up: boolean }) {
   return (
     <div className="chart-wrap">
       <div className="chart" ref={ref} />
-      {ticks.length < 2 && <div className="chart-empty">실시간 체결을 기다리는 중…</div>}
+      {ticks.length === 0 && <div className="chart-empty">실시간 체결을 기다리는 중…</div>}
     </div>
   );
 }

@@ -1,40 +1,41 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { StockInfo } from "../../../shared/protocol";
-import { api } from "../api";
+import { searchStocks } from "../../../shared/search";
+import { useAuth } from "../auth";
+import { catalogNow, loadCatalog } from "../catalog";
 
-/** 종목 검색 자동완성 (입력 후 300ms 디바운스) */
+/**
+ * 종목 검색 자동완성. 전체 종목 목록을 브라우저에 받아 두고 입력할 때마다 즉시 거른다(서버 왕복 없음).
+ * 관심 종목은 ★로 표시하고 위쪽에 보여 준다. 검색어가 비어 있으면 관심 종목 목록을 보여 준다.
+ */
 export function StockSearch({
   onSelect,
-  placeholder = "종목명 또는 코드 검색",
+  placeholder = "종목명·코드·초성 검색 (예: 네이버, 삼전, ㅅㅅㅈㅈ)",
   autoFocus = false,
 }: {
   onSelect: (stock: StockInfo) => void;
   placeholder?: string;
   autoFocus?: boolean;
 }) {
+  const { me } = useAuth();
   const [q, setQ] = useState("");
-  const [results, setResults] = useState<StockInfo[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
+  const [catalog, setCatalog] = useState<StockInfo[]>(catalogNow);
   const box = useRef<HTMLDivElement>(null);
+  const favorites = useMemo(() => new Set(me?.favorites ?? []), [me?.favorites]);
 
   useEffect(() => {
+    if (catalog.length === 0) loadCatalog().then(setCatalog).catch(() => undefined);
+  }, [catalog.length]);
+
+  const results = useMemo(() => {
     const term = q.trim();
-    if (!term) {
-      setResults([]);
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      api
-        .search(term)
-        .then((r) => {
-          setResults(r.results);
-          setActive(0);
-        })
-        .catch(() => setResults([]));
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [q]);
+    if (term) return searchStocks(catalog, term, favorites);
+    return catalog.filter((s) => favorites.has(s.symbol));
+  }, [q, catalog, favorites]);
+
+  useEffect(() => setActive(0), [q]);
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -47,7 +48,6 @@ export function StockSearch({
   const pick = (s: StockInfo) => {
     onSelect(s);
     setQ("");
-    setResults([]);
     setOpen(false);
   };
 
@@ -71,18 +71,30 @@ export function StockSearch({
           else if (e.key === "Escape") setOpen(false);
         }}
       />
-      {open && results.length > 0 && (
+      {open && (results.length > 0 || q.trim()) && (
         <ul className="search-results" role="listbox">
+          {!q.trim() && <li className="search-caption">★ 관심 종목</li>}
           {results.map((s, i) => (
             <li key={s.symbol} role="option" aria-selected={i === active}>
-              <button type="button" className={i === active ? "active" : ""} onMouseDown={() => pick(s)}>
-                <span>{s.name}</span>
+              <button
+                type="button"
+                className={i === active ? "active" : ""}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  pick(s);
+                }}
+              >
+                <span>
+                  {favorites.has(s.symbol) && <span className="fav-star">★</span>}
+                  {s.name}
+                </span>
                 <small>
                   {s.symbol} · {s.market}
                 </small>
               </button>
             </li>
           ))}
+          {q.trim() && results.length === 0 && <li className="search-caption">'{q}'에 맞는 종목이 없어요.</li>}
         </ul>
       )}
     </div>

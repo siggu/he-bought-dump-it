@@ -1,5 +1,6 @@
 import type { Quote } from "../../../shared/protocol";
 import { num, pct, signed, trend } from "../format";
+import { FavoriteButton } from "./FavoriteButton";
 
 export function QuoteHeader({
   name,
@@ -18,6 +19,7 @@ export function QuoteHeader({
   return (
     <div className="quote-header">
       <div className="quote-title">
+        <FavoriteButton symbol={symbol} />
         <h1>{name}</h1>
         <span className="muted">{symbol}</span>
         {badge && <span className="badge">{badge}</span>}

@@ -225,6 +225,9 @@ export async function buildMe(env: Env, userId: number): Promise<MeResponse> {
       isAdmin: user.role === "admin",
     },
     holdings: views,
+    favorites: (
+      await env.DB.prepare("SELECT symbol FROM favorites WHERE user_id = ? ORDER BY created_at").bind(userId).all<{ symbol: string }>()
+    ).results.map((r) => r.symbol),
     totals: {
       evaluation,
       total: user.cash + evaluation,

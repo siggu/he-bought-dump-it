@@ -4,6 +4,7 @@ import type { PublicBadge, StockInfo } from "../../../shared/protocol";
 import { api } from "../api";
 import { useAuth, useMe } from "../auth";
 import { Nickname } from "../components/Badge";
+import { catalogNow, loadCatalog } from "../catalog";
 import { BankruptRule } from "../components/BankruptRule";
 import { num, pct, signed, trend, won } from "../format";
 
@@ -18,10 +19,18 @@ export const POPULAR: StockInfo[] = [
   { symbol: "247540", name: "에코프로비엠", market: "KOSDAQ" },
 ];
 
+function catalogName(symbol: string): string {
+  return catalogNow().find((s) => s.symbol === symbol)?.name ?? POPULAR.find((s) => s.symbol === symbol)?.name ?? symbol;
+}
+
 /** 내 계좌: 보유 종목은 1분 캐시 시세로 평가하고, 실시간 시세는 종목 화면에서만 받는다. */
 export function Dashboard() {
   const me = useMe();
   const { refresh } = useAuth();
+  const [, setCatalogReady] = useState(false);
+  useEffect(() => {
+    loadCatalog().then(() => setCatalogReady(true)).catch(() => undefined);
+  }, []);
 
   // 화면이 보이는 동안 1분마다 평가금액 갱신 (서버 캐시 공유라 KIS 호출은 늘지 않는다)
   useEffect(() => {
@@ -112,6 +121,20 @@ export function Dashboard() {
             )}
             <p className="muted small">평가금액은 1분마다 갱신돼요. 실시간 시세는 종목을 눌러 들어가면 그 종목만 받아요.</p>
           </section>
+
+          {me.favorites.length > 0 && (
+            <section className="card">
+              <h2>★ 관심 종목</h2>
+              <div className="chips">
+                {me.favorites.map((symbol) => (
+                  <Link key={symbol} className="chip fav" to={`/stocks/${symbol}`}>
+                    <span className="fav-star">★</span>
+                    {catalogName(symbol)}
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
 
           <section className="card">
             <h2>인기 종목</h2>
